@@ -1,5 +1,8 @@
 import streamlit as st
 import sqlite3
+import numpy as np
+import pandas as pd
+import datetime
 
 def conectar_db():
     return sqlite3.connect('produtos.db')
@@ -44,6 +47,110 @@ def inserir_produto(cod, descricao, fabricante, fornecedor, unidade, qtd_estoque
     conn.commit()
     conn.close()
 
+def listar_clientes():
+    conn = conectar_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM cadastro_cliente_pessoa_fisica")
+    produtos = cursor.fetchall()
+    conn.close()
+    return produtos
+
+def exibir_cliente_atual():
+    if 'indice_cliente' not in st.session_state:
+        st.session_state.indice_cliente = 0
+
+    conn = conectar_db()
+    cursor = conn.cursor()
+    cursor.execute(''' SELECT * FROM cadastro_cliente_pessoa_fisica WHERE id = ? ''', (st.session_state.indice_cliente + 1,))
+    cliente = cursor.fetchone()
+    conn.close()
+
+    col1, col2 = st.columns([2,4])
+
+    with col1:
+        cod_cli = st.text_input('Código', cliente[1])
+    with col2:
+        nome_cli = st.text_input('Nome', cliente[2])
+
+    col1, col2, col3, col4 = st.columns(4)
+
+    with col1:
+        cpf_cli = st.text_input('CPF', cliente[3])
+    with col2:
+        rg_cli = st.text_input('RG', cliente[4])
+    with col3:
+        try:
+            data_nascimento_cli = datetime.datetime.strptime(cliente[14], '%Y-%m-%d').date()
+        except ValueError:
+            data_nascimento_cli = None
+        data_nascimento_cli = st.date_input('Data de nascimento', data_nascimento_cli)
+    with col4:
+        filiacao_cli = st.text_input('Filiação', cliente[15])
+
+    col1, col2, col3 = st.columns([4,2,2])
+
+    with col1:
+        endereco_cli = st.text_input('Endereço', cliente[5])
+    with col2:
+        numero_cli = st.text_input('Numero', cliente[6])
+    with col3:
+        cep_cli = st.text_input('CEP', cliente[7])
+
+    col1, col2, col3 = st.columns(3)
+
+    with col1:
+        bairro_cli = st.text_input('Bairro', cliente[8])
+    with col2:
+        cidade_cli = st.text_input('Cidade', cliente[9])
+    with col3:
+        estado_cli = st.text_input('Estado', cliente[10])
+
+    col1, col2, col3 = st.columns(3)
+
+    with col1:
+        complemento_cli = st.text_input('Complemento', cliente[11])
+    with col2:
+        telefone_cli = st.text_input('Telefone', cliente[12])
+    with col3:
+        celular_cli = st.text_input('Celular', cliente[13])
+    
+    email_cli = st.text_input('Email', cliente[16])
+    observacao_cli = st.text_area('Observação: ', cliente[17], height=150)
+
+    st.write('Deseja salvar as alterações?')
+
+    col1, col2, col3 = st.columns([1, 1, 4])
+
+    with col1:
+        salvar_sim = st.button('Sim', use_container_width=True)
+    with col2:    
+        salvar_nao = st.button('Não', use_container_width=True)
+    with col3:
+        st.write('')
+
+    if salvar_sim:
+        conn = conectar_db()
+        cursor = conn.cursor()
+        cursor.execute('''
+            UPDATE cadastro_cliente_pessoa_fisica 
+            SET cod_cli = ?, nome_cli = ?, cpf_cli = ?, rg_cli = ?, endereco_cli = ?, numero_cli = ?, cep_cli = ?, bairro_cli = ?, cidade_cli = ?, estado_cli = ?, complemento_cli = ?, 
+                telefone_cli = ?, celular_cli = ?, data_nascimento_cli = ?, filiacao_cli = ?, email_cli = ?, observacao_cli = ? 
+            WHERE id = ?
+        ''', (cod_cli, nome_cli, cpf_cli, rg_cli, endereco_cli, numero_cli, cep_cli, bairro_cli, cidade_cli, estado_cli, complemento_cli, 
+                telefone_cli, celular_cli, data_nascimento_cli, filiacao_cli, email_cli, observacao_cli, st.session_state.indice_cliente + 1))
+            
+        conn.commit()
+        conn.close()
+
+        st.success("Cliente atualizado com sucesso!")
+
+    elif salvar_nao:
+        st.warning("Alterações não salvas.")
+
+def gerar_codigo_aleatorio(tamanho=8):
+    digitos = '0123456789'
+    return ''.join(np.random.choice(list(digitos), tamanho))
+
 col1, col2, col3 = st.columns(3)
 
 with col1:
@@ -61,7 +168,7 @@ with col3:
 
 if st.session_state.page == 'cli':
     st.write('\n')
-    st.header('CADASTRAR NOVO CLIENTE')
+    st.header('Clientes Cadastrados')
 
     col1, col2, col3, col4, col5 = st.columns([1,1,2,2,2])
     
@@ -72,12 +179,13 @@ if st.session_state.page == 'cli':
 
     with col2:
         if st.button("→", use_container_width=True, key="right_button"):
-            if st.session_state.indice_produto < len(listar_produtos()) - 1:
+            if st.session_state.indice_produto < len(listar_clientes()) - 1:
                 st.session_state.indice_produto += 1
 
     with col3:
         if st.button('Incluir', use_container_width=True, key="incluir_button"):
             st.session_state.page = 'incluir'
+            st.rerun()
 
     with col4:
         if st.button('Pesquisar', use_container_width=True, key="pesquisar_button"):
@@ -89,8 +197,25 @@ if st.session_state.page == 'cli':
             st.session_state.page = 'list'
             st.rerun()
 
-    input_option = st.radio("Cadastrar cliente:", ("Pessoa Física","Pessoa Jurídica"))
+    exibir_cliente_atual()
 
+if st.session_state.page == 'incluir':
+    st.header('Cadastrar Cliente')
+
+    col1, col2, col3 = st.columns([2,4,2])
+    
+    with col1:
+        input_option = st.radio("", ("Pessoa Física","Pessoa Jurídica"))
+        
+    with col2:
+        st.write('')
+        
+    with col3:
+        st.write('\n')
+        st.write('\n')
+        if st.button('Voltar', use_container_width=True, key="voltar_button"):
+            st.session_state.page = 'voltar'
+    
     if input_option == "Pessoa Física":
         st.subheader("Cadastro - Pessoa Física")
         with st.form(key='Cliente_form_pf'):
@@ -98,7 +223,7 @@ if st.session_state.page == 'cli':
             col1, col2 = st.columns([2,4])
 
             with col1:
-                cod_cli = st.text_input('Código')
+                cod_cli = st.text_input('Código', value=gerar_codigo_aleatorio())
             with col2:
                 nome_cli = st.text_input('Nome')
 
@@ -210,6 +335,13 @@ if st.session_state.page == 'cli':
             else:
                 st.error('Preencha todos os campos obrigatórios.')
 
+    if st.session_state.page == 'voltar':
+        st.session_state.page = 'cli'
+        st.rerun()
+
+if st.session_state.page == 'list':
+    listar_clientes()
+    
 if st.session_state.page == 'for':
     st.write('\n')
     st.header('CADASTRAR NOVO FORNECEDOR')
