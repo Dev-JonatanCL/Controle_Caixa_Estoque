@@ -1,15 +1,16 @@
 import streamlit as st
-from Banco import sqlite3
+import sqlite3
 from datetime import datetime
 import pandas as pd
 import locale
 from fpdf import FPDF
+import xml.etree.ElementTree as ET
 
 locale.setlocale(locale.LC_ALL, 'portuguese')
 
 def exibir_data_atual():
     data_atual = datetime.now().strftime("%d/%m/%Y")
-    st.markdown(f"<h1 style='text-align: center;'>{data_atual}</h1>", unsafe_allow_html=True)
+    st.markdown(f"<h1 style='text-align: left;'>{data_atual}</h1>", unsafe_allow_html=True)
 
 def formatar_contabil(valor):
     return locale.currency(valor, grouping=True)
@@ -143,6 +144,93 @@ def pesquisar_produtos(pesquisa):
     conn.close()
     return produtos
 
+def pesquisar_fornecedor():
+    fornecedor_input = st.text_input("Digite o código ou nome do fornecedor:")
+
+    if not fornecedor_input:
+        st.error("Por favor, insira o código ou nome do fornecedor.")
+        return None
+
+    conn = conectar_db()
+    cursor = conn.cursor()
+
+    if fornecedor_input.isdigit():
+        cursor.execute('SELECT cod_fornecedor, nome_fornecedor FROM cadastro_fornecedores WHERE cod_fornecedor = ?', (fornecedor_input,))
+    else:
+        cursor.execute('SELECT cod_fornecedor, nome_fornecedor FROM cadastro_fornecedores WHERE nome_fornecedor LIKE ?', ('%' + fornecedor_input + '%',))
+
+    fornecedor = cursor.fetchone()
+    conn.close()
+
+    if fornecedor:
+        return fornecedor
+    else:
+        st.error(f"Fornecedor não encontrado. '{fornecedor_input}'.")
+        return None
+
+def entrada_nfe(conteudo_xml, fornecedor):
+    if fornecedor is None:
+        st.error("Fornecedor não encontrado. Verifique a pesquisa e tente novamente.")
+        return
+
+    cod_fornecedor, nome_fornecedor = fornecedor
+
+    conn = conectar_db()
+    cursor = conn.cursor()
+
+    tree = ET.ElementTree(ET.fromstring(conteudo_xml))
+    root = tree.getroot()
+
+    ns = {'nfe': 'http://www.portalfiscal.inf.br/nfe'}
+
+    for dup in root.findall('.//nfe:dup', ns):
+        numero_documento = root.find('.//nfe:ide/nfe:nNF', ns).text
+        data_entrada = root.find('.//nfe:ide/nfe:dhEmi', ns).text[:10]
+        vencimento = dup.find('nfe:dVenc', ns).text
+        parcela = int(dup.find('nfe:nDup', ns).text.split('/')[-1])
+        valor = float(dup.find('nfe:vDup', ns).text)
+
+        cursor.execute(''' 
+            INSERT INTO contas_a_pagar (cod_fornecedor, nome_fornecedor, data_entrada, vencimento, numero_documento, parcela, valor)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        ''', (cod_fornecedor, nome_fornecedor, data_entrada, vencimento, numero_documento, parcela, valor))
+
+        st.write(f"Parcela {parcela} inserida com vencimento em {vencimento} e valor de R$ {valor:.2f}.")
+
+    for det in root.findall('.//nfe:det', ns):
+        cod_produto = det.find('.//nfe:prod/nfe:cProd', ns).text
+        descricao_produto = det.find('.//nfe:prod/nfe:xProd', ns).text
+        fabricante_produto = det.find('.//nfe:prod/nfe:xFab', ns).text if det.find('.//nfe:prod/nfe:xFab', ns) is not None else "Desconhecido"
+        unidade_produto = int(float(det.find('.//nfe:prod/nfe:uCom', ns).text)) if det.find('.//nfe:prod/nfe:uCom', ns) is not None else 1
+        quantidade = int(float(det.find('.//nfe:prod/nfe:qCom', ns).text))
+        valor_unitario = float(det.find('.//nfe:prod/nfe:vUnCom', ns).text)
+        observacao = "Produto adicionado automaticamente via XML."
+        margem_lucro = 0.3
+        preco_venda = valor_unitario * (1 + margem_lucro)
+        qtd_minima = 10
+
+        cursor.execute('SELECT cod FROM produtos WHERE cod = ?', (cod_produto,))
+        produto_existente = cursor.fetchone()
+
+        if produto_existente:
+            cursor.execute(''' 
+                UPDATE produtos
+                SET qtd_estoque = qtd_estoque + ?, custo = ?
+                WHERE cod = ?
+            ''', (quantidade, valor_unitario, cod_produto))
+            st.write(f"Produto {cod_produto} atualizado com {quantidade} unidades no estoque.")
+        else:
+            cursor.execute('''
+                INSERT INTO produtos (cod, descricao, fabricante, fornecedor, unidade, qtd_estoque, custo, margem, preco, observacao, qtd_minima)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ''', (cod_produto, descricao_produto, fabricante_produto, nome_fornecedor, unidade_produto, quantidade, valor_unitario, margem_lucro, preco_venda, observacao, qtd_minima))
+            st.write(f"Produto {cod_produto} cadastrado com {quantidade} unidades, custo de R$ {valor_unitario:.2f}, e preço de venda de R$ {preco_venda:.2f}.")
+
+    conn.commit()
+    conn.close()
+
+    st.success("Entrada de NF-e realizada com sucesso!")
+
 def exibir_produto_atual():
     if 'indice_produto' not in st.session_state:
         st.session_state.indice_produto = 0
@@ -237,10 +325,6 @@ def tela_pesquisa():
             produtos_encontrados = pesquisar_produtos(pesquisa)
             exibir_resultados_pesquisa(produtos_encontrados)
 
-    if st.button('Voltar', use_container_width=True):
-        st.session_state.page = 'Etq'
-        st.rerun()
-
 col1, col2, col3 = st.columns(3)
 
 with col1:
@@ -254,6 +338,8 @@ with col2:
 with col3:
     if st.button('Entrada', use_container_width=True, key="entrada_button"):
         st.session_state.page = 'Ent'
+
+
 
 if 'page' not in st.session_state:
     st.session_state.page = 'Etq'
@@ -335,6 +421,9 @@ if st.session_state.page == 'list':
 
 if st.session_state.page == 'pesq':
     tela_pesquisa()
+    if st.button('Voltar', use_container_width=True):
+        st.session_state.page = 'Etq'
+        st.rerun()
 
 if st.session_state.page == 'apagar':
     st.write('\n')
@@ -415,10 +504,30 @@ if st.session_state.page == 'PedC':
 
         st.dataframe(produtos_df.style)
 
-    else:
-        st.write("Nenhum produto abaixo do estoque mínimo encontrado para o fornecedor especificado.")
 if st.session_state.page == 'Ent':
     st.header('Entrada')
     exibir_data_atual()
-    st.selectbox('Tipo de entrada: ', ['B', 'C', 'D'])
+    st.subheader("Entrada de NF-e com XML")
+
+    pesquisar_fornecedor()
+
+    input_option = st.radio("Escolha como deseja inserir o XML:", ("Carregar arquivo", "Digitar manualmente"))
+
+    if input_option == "Carregar arquivo":
+        uploaded_file = st.file_uploader("Carregue o arquivo XML da NF-e", type=["xml"])
+        if uploaded_file is not None:
+            conteudo_xml = uploaded_file.read().decode("utf-8")
+            fornecedor = pesquisar_fornecedor()
+            if fornecedor:
+                entrada_nfe(conteudo_xml, fornecedor)
+
+    elif input_option == "Digitar manualmente":
+        conteudo_xml = st.text_area("Cole o conteúdo do XML da NF-e aqui:")
+        if conteudo_xml:
+            fornecedor = pesquisar_fornecedor()
+            if fornecedor:
+                entrada_nfe(conteudo_xml, fornecedor)
+
+
+
     
