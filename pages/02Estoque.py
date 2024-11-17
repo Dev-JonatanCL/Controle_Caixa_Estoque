@@ -237,9 +237,13 @@ def exibir_produto_atual():
 
     conn = conectar_db()
     cursor = conn.cursor()
-    cursor.execute("SELECT * FROM produtos WHERE id = ?", (st.session_state.indice_produto + 1,))
+    cursor.execute(''' SELECT * FROM produtos LIMIT 1 OFFSET ? ''', (st.session_state.indice_produto,))
     produto = cursor.fetchone()
     conn.close()
+
+    if produto is None:
+        st.warning("Não há produtos cadastrados.")
+        return
 
     col1, col2 = st.columns([2,5])
 
@@ -273,19 +277,7 @@ def exibir_produto_atual():
 
     observacao = st.text_area("Observação: ", produto[10], height=150)
 
-
-    st.write('Deseja salvar as alterações?')
-
-    col1, col2, col3 = st.columns([1,1,4])
-
-    with col1:
-        salvar_sim = st.button('Sim', use_container_width=True)
-    with col2:    
-        salvar_nao = st.button('Não', use_container_width=True)
-    with col3:
-        st.write('')
-
-    if salvar_sim:
+    if st.button('Salvar Alterações', use_container_width=True):
         conn = conectar_db()
         cursor = conn.cursor()
         cursor.execute('''
@@ -296,10 +288,7 @@ def exibir_produto_atual():
         conn.commit()
         conn.close()
 
-        st.success("Produto atualizado com sucesso!")
-
-    elif salvar_nao:
-        st.warning("Alterações não salvas.")      
+        st.success("Produto atualizado com sucesso!")   
 
 def exibir_resultados_pesquisa(produtos):
     if len(produtos) > 0:
@@ -325,6 +314,9 @@ def tela_pesquisa():
             produtos_encontrados = pesquisar_produtos(pesquisa)
             exibir_resultados_pesquisa(produtos_encontrados)
 
+def mudar_pagina(pagina):
+    st.session_state.page = pagina
+
 col1, col2, col3 = st.columns(3)
 
 with col1:
@@ -348,7 +340,7 @@ if st.session_state.page == 'Etq':
     st.write('\n')
     st.subheader('Controle de Estoque')
 
-    col1, col2, col3, col4, col5, col6 = st.columns([1,1,2,2,2,2])
+    col1, col2, col3, col4, col5 = st.columns([1,1,2,2,2])
     
     with col1:
         if st.button("←", use_container_width=True, key="left_button"):
@@ -359,22 +351,18 @@ if st.session_state.page == 'Etq':
         if st.button("→", use_container_width=True, key="right_button"):
             if st.session_state.indice_produto < len(listar_produtos()) - 1:
                 st.session_state.indice_produto += 1
-
-    with col3:
-        if st.button('Incluir', use_container_width=True, key="incluir_button"):
-            st.session_state.page = 'incluir'
     
-    with col4:
+    with col3:
         if st.button('Apagar', use_container_width=True, key="apagar_button"):
             st.session_state.page = 'apagar'
             st.rerun()
 
-    with col5:
+    with col4:
         if st.button('Pesquisar', use_container_width=True, key="pesquisar_button"):
             st.session_state.page = 'pesq'
             st.rerun()
 
-    with col6:
+    with col5:
         if st.button('Listagem', use_container_width=True, key="listagem_button"):
             st.session_state.page = 'list'
             st.rerun()
