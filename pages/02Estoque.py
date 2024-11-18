@@ -314,9 +314,6 @@ def tela_pesquisa():
             produtos_encontrados = pesquisar_produtos(pesquisa)
             exibir_resultados_pesquisa(produtos_encontrados)
 
-def mudar_pagina(pagina):
-    st.session_state.page = pagina
-
 col1, col2, col3 = st.columns(3)
 
 with col1:
@@ -330,8 +327,6 @@ with col2:
 with col3:
     if st.button('Entrada', use_container_width=True, key="entrada_button"):
         st.session_state.page = 'Ent'
-
-
 
 if 'page' not in st.session_state:
     st.session_state.page = 'Etq'
