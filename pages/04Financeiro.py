@@ -33,10 +33,18 @@ def listar_contas_a_pagar():
 def listar_contas_pagas():
     conn = conectar_db()
     cursor = conn.cursor()
-    cursor.execute("SELECT * FROM contas_pagas")
+    cursor.execute(''' SELECT * FROM contas_pagas ''')
     contas_pagas = cursor.fetchall()
     conn.close()
     return contas_pagas
+
+def buscar_fornecedores():
+    conn = conectar_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT id, nome_fornecedor FROM cadastro_fornecedores")
+    fornecedores = cursor.fetchall()
+    conn.close()
+    return fornecedores
 
 def exibir_contas_a_pagar():
     if 'indice_pagar' not in st.session_state:
@@ -118,7 +126,7 @@ if st.session_state.page == "pagar":
     st.write('\n')
     st.header("Contas a pagar")
 
-    col1, col2, col3, col4, col5, col6 = st.columns([1,1,2,2,2,2])
+    col1, col2, col3, col4, col5 = st.columns([1,1,2,2,2])
     
     with col1:
         if st.button("←", use_container_width=True, key="left_button"):
@@ -133,17 +141,14 @@ if st.session_state.page == "pagar":
     with col3:
         if st.button('Incluir', use_container_width=True, key="incluir_button"):
             st.session_state.page = 'incluir'
+            st.rerun()
 
     with col4:
-        if st.button('Quitar', use_container_width=True, key="quitar_button"):
-            st.session_state.page = 'quitar'
-
-    with col5:
         if st.button('Pesquisar', use_container_width=True, key="pesq_pagar_button"):
             st.session_state.page = 'pesq_pagar'
             st.rerun()
 
-    with col6:
+    with col5:
         if st.button('Listagem', use_container_width=True, key="listagem_pagar_button"):
             st.session_state.page = 'list_pagar'
             st.rerun()
@@ -154,37 +159,78 @@ if st.session_state.page == 'incluir':
     st.write('\n')
     st.header('Cadastrar nova conta')
 
-    if st.button('Voltar', use_container_width=True, key="voltar_button"):
-        st.session_state.page = 'pagar'
+    col1, col2, col3 = st.columns([2, 4, 2])
 
-    with st.form("form_contas_a_pagar"):
+    with col1:
+        input_option = st.radio("", ("Fornecedor", "Não cadastrado"))
 
-        col1, col2 = st.columns(2)
+    with col2:
+        st.write('')
 
-        with col1:
-            cod = st.text_input("Código")
-            nome = st.text_input("Nome")
-            data_entrada = st.date_input("Data de Entrada")
-            vencimento = st.date_input("Vencimento")
-        with col2:
-            num_documento = st.text_input("Número do Documento")
-            parcela = st.number_input("Parcela", min_value=1, step=1)
-            valor = st.number_input("Valor", min_value=0.0, step=0.01, format="%.2f")
+    with col3:
+        st.write('\n')
+        st.write('\n')
+        if st.button('Voltar', use_container_width=True, key="voltar_button"):
+            st.session_state.page = 'pagar'
 
-        submit = st.form_submit_button("Cadastrar")
+    if input_option == 'Fornecedor':
+        with st.form("form_contas_a_pagar_fornecedor"):
 
-    if submit:
-        if cod and nome and data_entrada and vencimento and num_documento and parcela and valor:
-            inserir_conta(cod, nome, data_entrada, vencimento, num_documento, parcela, valor)  
-            st.success('Cadastro de nova conta realizado com sucesso!')
-        else:
-            st.error('Preencha todos os campos obrigatórios.')
+            col1, col2 = st.columns(2)
 
-if st.session_state.page == 'quitar':
-    st.write('')
+            with col1:
+
+                fornecedores = buscar_fornecedores()
+
+                cod = st.text_input("Código do fornecedor")
+                opc_for = [fornecedor[1] for fornecedor in fornecedores]
+                nome = st.selectbox("Razão Social", opc_for)
+                data_entrada = st.date_input("Data de Entrada")
+                vencimento = st.date_input("Vencimento")
+
+            with col2:
+                num_documento = st.text_input("Número do Documento")
+                parcela = st.number_input("Parcela", min_value=1, step=1)
+                valor = st.number_input("Valor", min_value=0.0, step=0.01, format="%.2f")
+
+            submit = st.form_submit_button("Cadastrar") 
+
+        if submit:
+            if cod and nome and data_entrada and vencimento and num_documento and parcela and valor:
+                inserir_conta(cod, nome, data_entrada, vencimento, num_documento, parcela, valor)  
+                st.success('Cadastro de nova conta realizado com sucesso!')
+            else:
+                st.error('Preencha todos os campos obrigatórios.')
+
+    else:
+        with st.form("form_contas_a_pagar_fornecedor"):
+
+            col1, col2 = st.columns(2)
+
+            with col1:
+                cod = st.text_input("Codigo do fornecedor")
+                nome = st.text_input("Razao social")
+                data_entrada = st.date_input("Data de Entrada")
+                vencimento = st.date_input("Vencimento")
+            with col2:
+                num_documento = st.text_input("Número do Documento")
+                parcela = st.number_input("Parcela", min_value=1, step=1)
+                valor = st.number_input("Valor", min_value=0.0, step=0.01, format="%.2f")
+
+            submit = st.form_submit_button("Cadastrar") 
+
+            if submit:
+                if cod and nome and data_entrada and vencimento and num_documento and parcela and valor:
+                    inserir_conta(cod, nome, data_entrada, vencimento, num_documento, parcela, valor)  
+                    st.success('Cadastro de nova conta realizado com sucesso!')
+                else:
+                    st.error('Preencha todos os campos obrigatórios.')
 
 if st.session_state.page == 'pesq_pagar':
     st.write('')
 
 if st.session_state.page == 'list_pagar':
-    st.write('')
+    pagar = listar_contas_a_pagar()
+    pagar_df = pd.DataFrame(pagar, columns=["cod", "nome", "data_entrada", "vencimento", "num_documento", "parcela", "valor"])
+
+    st.dataframe(pagar_df.style)
