@@ -1,7 +1,7 @@
 import sqlite3
 
 def criar_banco_dados():
-    conn = sqlite3.connect('produtos.db')
+    conn = sqlite3.connect('banco.db')
     cursor = conn.cursor()
 
     cursor.execute('''
@@ -110,7 +110,7 @@ def criar_banco_dados():
             cod_cliente INTEGER NOT NULL,
             nome_cliente TEXT NOT NULL,
             cpf TEXT NOT NULL,
-            rg TEXT NOT NULL,
+            rg TEXT,
             endereco TEXT NOT NULL,
             numero TEXT NOT NULL,
             cep TEXT NOT NULL,
@@ -120,9 +120,9 @@ def criar_banco_dados():
             complemento TEXT,
             telefone TEXT,
             celular TEXT,
-            data_nascimento TEXT NOT NULL,
-            filiacao TEXT NOT NULL,
-            email TEXT NOT NULL,
+            data_nascimento,
+            filiacao TEXT,
+            email TEXT,
             observacao TEXT
         )
     ''')
@@ -143,7 +143,7 @@ def criar_banco_dados():
             inscricao_estadual TEXT NOT NULL,
             telefone TEXT,
             celular TEXT,
-            contato TEXT NOT NULL,
+            contato TEXT,
             email TEXT NOT NULL,
             observacao TEXT
         )
@@ -164,8 +164,8 @@ def criar_banco_dados():
             celular TEXT,
             cnpj TEXT NOT NULL,
             inscricao_estadual TEXT NOT NULL,
-            email TEXT NOT NULL,
-            contato TEXT NOT NULL,
+            email TEXT,
+            contato TEXT,
             observacao TEXT
         )
     ''')

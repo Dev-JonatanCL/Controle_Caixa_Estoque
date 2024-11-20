@@ -4,7 +4,7 @@ import pandas as pd
 import datetime
 
 def conectar_db():
-    return sqlite3.connect('produtos.db')
+    return sqlite3.connect('banco.db')
 
 def formatar_data(data_str):
     try:
@@ -45,6 +45,131 @@ def buscar_fornecedores():
     fornecedores = cursor.fetchall()
     conn.close()
     return fornecedores
+
+def pesquisar_pagas(pesquisa):
+    conn = conectar_db()
+    cursor = conn.cursor()
+    cursor.execute('''
+        SELECT * FROM contas_pagas 
+        WHERE numero_documento LIKE ? OR data_pagamento LIKE ?
+    ''', ('%' + pesquisa + '%', '%' + pesquisa + '%'))
+    pagas = cursor.fetchall()
+    conn.close()
+    return pagas
+
+def pesquisar_pagar(pesquisa):
+    conn = conectar_db()
+    cursor = conn.cursor()
+    cursor.execute('''
+        SELECT * FROM contas_a_pagar 
+        WHERE numero_documento LIKE ? OR data_entrada LIKE ?
+    ''', ('%' + pesquisa + '%', '%' + pesquisa + '%'))
+    pagar = cursor.fetchall()
+    conn.close()
+    return pagar
+
+def exibir_resultados_pesquisa_pagas(pagas):
+    if len(pagas) > 0:
+        pagas_df = pd.DataFrame(pagas, columns=["Código", "Credor", "N° Documento", "Data Pagamento", "Vencimento", "Parcela", "Valor"])
+        st.dataframe(pagas_df.style, use_container_width=True)
+    else:
+        st.write("Nenhuma conta paga encontrada.")
+
+def tela_pesquisa_pagas():
+
+    pesquisa = st.text_input("Digite o N° do documento ou data do pagamento para pesquisar: ")
+
+    if pesquisa:
+        pagas_encontradas = pesquisar_pagas(pesquisa)
+        exibir_resultados_pesquisa_pagas(pagas_encontradas)
+
+def tela_pesquisa_pagar():
+
+    pesquisa = st.text_input("Digite o N° do documento ou data da entrada para pesquisar: ")
+
+    if pesquisa:
+        pagar_encontradas = pesquisar_pagar(pesquisa)
+        exibir_resultados_pesquisa_pagar(pagar_encontradas)
+
+def exibir_resultados_pesquisa_pagar(pagar):
+    if not pagar:
+        st.warning("Não há contas a pagar.")
+        return
+    
+    if st.session_state.indice_pagar >= len(pagar):
+        st.session_state.indice_pagar = 0
+    elif st.session_state.indice_pagar < 0:
+        st.session_state.indice_pagar = len(pagar) - 1
+
+    pagar_atual = pagar[st.session_state.indice_pagar]
+    col1, col2, col3 = st.columns([1, 1, 3])
+    
+    with col1:
+        if st.button("←", use_container_width=True, key="left_button"):
+            if st.session_state.indice_pagar > 0:
+                st.session_state.indice_pagar -= 1
+                st.rerun()
+
+    with col2:
+        if st.button("→", use_container_width=True, key="right_button"):
+            if st.session_state.indice_pagar < len(pagar) - 1:
+                st.session_state.indice_pagar += 1
+                st.rerun()
+    
+    with col3:
+        if st.button('Voltar', use_container_width=True, key="voltar_button"):
+            st.session_state.page = 'pagar'
+            st.rerun()
+
+    with st.form("form_contas_a_pagar"):
+
+        col1, col2 = st.columns(2)
+
+        with col1:
+            cod = st.text_input("Código do fornecedor", pagar_atual[1])
+            nome = st.text_input("Nome do fornecedor", pagar_atual[2])
+            data_entrada = st.date_input("Data de Entrada", pagar_atual[3])
+            vencimento = st.date_input("Vencimento", pagar_atual[4])
+        with col2:
+            num_documento = st.text_input("Número do Documento", pagar_atual[5])
+            parcela = st.number_input("Parcela", pagar_atual[6], min_value=1, step=1)
+            valor = st.number_input("Valor", pagar_atual[7], min_value=0.0, step=0.01, format="%.2f")
+
+        data_quitacao = st.form_submit_button("Quitar")
+
+    if data_quitacao:
+        data_pagamento = datetime.now().formatar_data()
+        
+        conn = conectar_db()
+        cursor = conn.cursor()
+        
+        cursor.execute('''
+            INSERT INTO contas_pagas (cod_fornecedor, nome_fornecedor, numero_documento, valor, parcela, data_pagamento, vencimento)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        ''', (cod, nome, num_documento, valor, parcela, data_pagamento, vencimento))
+        
+        cursor.execute('''
+            DELETE FROM contas_a_pagar WHERE id = ?
+        ''', (pagar[0],))
+        
+        conn.commit()
+        conn.close()
+
+        st.success("Conta quitada com sucesso !")
+    
+    if st.button('Salvar Alterações', use_container_width=True):
+        conn = conectar_db()
+        cursor = conn.cursor()
+        cursor.execute('''
+            UPDATE contas_a_pagar
+            SET cod_fornecedor = ?, nome_fornecedor = ?, data_entrada = ?, vencimento = ?, 
+                numero_documento = ?, parcela = ?, valor = ?, data_quitacao = ?
+            WHERE id = ?
+        ''', (cod, nome, data_entrada, vencimento, num_documento, parcela, valor, data_quitacao, pagar[0]))
+           
+        conn.commit()
+        conn.close()
+        st.success("Cliente atualizado com sucesso!")
 
 def exibir_contas_a_pagar():
     if 'indice_pagar' not in st.session_state:
@@ -172,6 +297,7 @@ if st.session_state.page == 'incluir':
         st.write('\n')
         if st.button('Voltar', use_container_width=True, key="voltar_button"):
             st.session_state.page = 'pagar'
+            st.rerun()
 
     if input_option == 'Fornecedor':
         with st.form("form_contas_a_pagar_fornecedor"):
@@ -182,7 +308,7 @@ if st.session_state.page == 'incluir':
 
                 fornecedores = buscar_fornecedores()
 
-                cod = st.text_input("Código do fornecedor")
+                cod = st.text_input("Código do Fornecedor")
                 opc_for = [fornecedor[1] for fornecedor in fornecedores]
                 nome = st.selectbox("Razão Social", opc_for)
                 data_entrada = st.date_input("Data de Entrada")
@@ -208,8 +334,8 @@ if st.session_state.page == 'incluir':
             col1, col2 = st.columns(2)
 
             with col1:
-                cod = st.text_input("Codigo do fornecedor")
-                nome = st.text_input("Razao social")
+                cod = st.text_input("Código do Fornecedor")
+                nome = st.text_input("Razão Social")
                 data_entrada = st.date_input("Data de Entrada")
                 vencimento = st.date_input("Vencimento")
             with col2:
@@ -227,10 +353,28 @@ if st.session_state.page == 'incluir':
                     st.error('Preencha todos os campos obrigatórios.')
 
 if st.session_state.page == 'pesq_pagar':
-    st.write('')
+    tela_pesquisa_pagar()
 
 if st.session_state.page == 'list_pagar':
-    pagar = listar_contas_a_pagar()
-    pagar_df = pd.DataFrame(pagar, columns=["cod", "nome", "data_entrada", "vencimento", "num_documento", "parcela", "valor"])
+    st.write('')
+    st.header('Listagem de Contas a Pagar')
 
-    st.dataframe(pagar_df.style)
+    if st.button('Voltar', use_container_width=True, key="voltar_button"):
+        st.session_state.page = 'pagar'
+        st.rerun()
+
+    pagar = listar_contas_a_pagar()
+    pagar_df = pd.DataFrame(pagar, columns=["Código", "Credor", "N° Documento", "Data Entrada", "Vencimento", "Parcela", "Valor"])
+
+    st.dataframe(pagar_df.style, use_container_width=True)
+
+if st.session_state.page == 'pagas':
+    st.write('')
+    st.header('Listagem de Contas Pagas')
+
+    tela_pesquisa_pagas()    
+
+    pagas = listar_contas_pagas()
+    pagas_df = pd.DataFrame(pagas, columns=["Código", "Credor", "N° Documento", "Data Pagamento", "Vencimento", "Parcela", "Valor"])
+
+    st.dataframe(pagas_df.style, use_container_width=True)

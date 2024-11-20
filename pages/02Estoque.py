@@ -5,6 +5,10 @@ import pandas as pd
 import locale
 from fpdf import FPDF
 import xml.etree.ElementTree as ET
+import smtplib
+from email.mime.multipart import MIMEMultipart
+from email.mime.base import MIMEBase
+from email import encoders
 
 locale.setlocale(locale.LC_ALL, 'portuguese')
 
@@ -19,7 +23,7 @@ def formatar_margem(margem):
     return "{:.2f}%".format(margem * 100/100)
 
 def conectar_db():
-    return sqlite3.connect('produtos.db')
+    return sqlite3.connect('banco.db')
 
 def pdf_listagem(produtos):
     pdf = FPDF()
@@ -168,68 +172,96 @@ def pesquisar_fornecedor():
         st.error(f"Fornecedor não encontrado. '{fornecedor_input}'.")
         return None
 
-def entrada_nfe(conteudo_xml, fornecedor):
-    if fornecedor is None:
-        st.error("Fornecedor não encontrado. Verifique a pesquisa e tente novamente.")
-        return
+def processar_xml_nfe():
+    st.header("Entrada de NF-e")
+    
+    arquivo_xml = st.file_uploader("Envie o arquivo XML da NF-e", type="xml")
+    
+    if arquivo_xml is not None:
+        try:
+            conteudo_xml = arquivo_xml.read().decode("utf-8")
+            tree = ET.ElementTree(ET.fromstring(conteudo_xml))
+            root = tree.getroot()
+            
+            ns = {'nfe': 'http://www.portalfiscal.inf.br/nfe'}
 
-    cod_fornecedor, nome_fornecedor = fornecedor
+            cnpj_fornecedor = root.find('.//nfe:emit/nfe:CNPJ', ns).text
+            nome_fornecedor = root.find('.//nfe:emit/nfe:xNome', ns).text
+            endereco = root.find('.//nfe:enderEmit/nfe:xLgr', ns).text
+            numero = root.find('.//nfe:enderEmit/nfe:nro', ns).text
+            bairro = root.find('.//nfe:enderEmit/nfe:xBairro', ns).text
+            cidade = root.find('.//nfe:enderEmit/nfe:xMun', ns).text
+            estado = root.find('.//nfe:enderEmit/nfe:UF', ns).text
+            cep = root.find('.//nfe:enderEmit/nfe:CEP', ns).text
+            telefone = root.find('.//nfe:enderEmit/nfe:fone', ns).text if root.find('.//nfe:enderEmit/nfe:fone', ns) is not None else None
+            inscricao_estadual = root.find('.//nfe:emit/nfe:IE', ns).text if root.find('.//nfe:emit/nfe:IE', ns) is not None else None
+            contato = "Desconhecido"
 
-    conn = conectar_db()
-    cursor = conn.cursor()
+            conn = conectar_db()
+            cursor = conn.cursor()
 
-    tree = ET.ElementTree(ET.fromstring(conteudo_xml))
-    root = tree.getroot()
+            cursor.execute("SELECT cod_fornecedor FROM cadastro_fornecedores WHERE cnpj = ?", (cnpj_fornecedor,))
+            fornecedor = cursor.fetchone()
 
-    ns = {'nfe': 'http://www.portalfiscal.inf.br/nfe'}
+            if fornecedor:
+                cod_fornecedor = fornecedor[0]
+            else:
+                cursor.execute('''
+                    INSERT INTO cadastro_fornecedores (cod_fornecedor, nome_fornecedor, endereco, numero, bairro, cidade, estado, cep, telefone, celular, cnpj, inscricao_estadual, email, contato, observacao)
+                    VALUES ((SELECT COALESCE(MAX(cod_fornecedor), 0) + 1 FROM cadastro_fornecedores), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ''', (nome_fornecedor, endereco, numero, bairro, cidade, estado, cep, telefone, None, cnpj_fornecedor, inscricao_estadual, None, contato, None))
+                conn.commit()
+                cursor.execute("SELECT cod_fornecedor FROM cadastro_fornecedores WHERE cnpj = ?", (cnpj_fornecedor,))
+                cod_fornecedor = cursor.fetchone()[0]
+                st.write(f"Fornecedor {nome_fornecedor} cadastrado com sucesso!")
 
-    for dup in root.findall('.//nfe:dup', ns):
-        numero_documento = root.find('.//nfe:ide/nfe:nNF', ns).text
-        data_entrada = root.find('.//nfe:ide/nfe:dhEmi', ns).text[:10]
-        vencimento = dup.find('nfe:dVenc', ns).text
-        parcela = int(dup.find('nfe:nDup', ns).text.split('/')[-1])
-        valor = float(dup.find('nfe:vDup', ns).text)
+            for det in root.findall('.//nfe:det', ns):
+                cod_produto = det.find('.//nfe:prod/nfe:cProd', ns).text
+                descricao = det.find('.//nfe:prod/nfe:xProd', ns).text
+                unidade = det.find('.//nfe:prod/nfe:uCom', ns).text
+                qtd_estoque = int(float(det.find('.//nfe:prod/nfe:qCom', ns).text))
+                custo = float(det.find('.//nfe:prod/nfe:vUnCom', ns).text)
+                margem = 0.3 
+                preco = custo * (1 + margem)
+                observacao = "Cadastrado via XML"
 
-        cursor.execute(''' 
-            INSERT INTO contas_a_pagar (cod_fornecedor, nome_fornecedor, data_entrada, vencimento, numero_documento, parcela, valor)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-        ''', (cod_fornecedor, nome_fornecedor, data_entrada, vencimento, numero_documento, parcela, valor))
+                cursor.execute("SELECT id FROM produtos WHERE cod = ?", (cod_produto,))
+                produto = cursor.fetchone()
 
-        st.write(f"Parcela {parcela} inserida com vencimento em {vencimento} e valor de R$ {valor:.2f}.")
+                if produto:
+                    cursor.execute('''
+                        UPDATE produtos
+                        SET qtd_estoque = qtd_estoque + ?, custo = ?
+                        WHERE cod = ?
+                    ''', (qtd_estoque, custo, cod_produto))
+                    st.write(f"Produto {cod_produto} atualizado no estoque.")
+                else:
+                    cursor.execute('''
+                        INSERT INTO produtos (cod, descricao, fabricante, fornecedor, unidade, qtd_estoque, custo, margem, preco, observacao, qtd_minima)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ''', (cod_produto, descricao, nome_fornecedor, nome_fornecedor, unidade, qtd_estoque, custo, margem, preco, observacao, 10))
+                    st.write(f"Produto {cod_produto} cadastrado com sucesso!")
 
-    for det in root.findall('.//nfe:det', ns):
-        cod_produto = det.find('.//nfe:prod/nfe:cProd', ns).text
-        descricao_produto = det.find('.//nfe:prod/nfe:xProd', ns).text
-        fabricante_produto = det.find('.//nfe:prod/nfe:xFab', ns).text if det.find('.//nfe:prod/nfe:xFab', ns) is not None else "Desconhecido"
-        unidade_produto = int(float(det.find('.//nfe:prod/nfe:uCom', ns).text)) if det.find('.//nfe:prod/nfe:uCom', ns) is not None else 1
-        quantidade = int(float(det.find('.//nfe:prod/nfe:qCom', ns).text))
-        valor_unitario = float(det.find('.//nfe:prod/nfe:vUnCom', ns).text)
-        observacao = "Produto adicionado automaticamente via XML."
-        margem_lucro = 0.3
-        preco_venda = valor_unitario * (1 + margem_lucro)
-        qtd_minima = 10
+            numero_documento = root.find('.//nfe:ide/nfe:nNF', ns).text
+            data_entrada = root.find('.//nfe:ide/nfe:dhEmi', ns).text[:10]
 
-        cursor.execute('SELECT cod FROM produtos WHERE cod = ?', (cod_produto,))
-        produto_existente = cursor.fetchone()
+            for dup in root.findall('.//nfe:dup', ns):
+                parcela = int(dup.find('nfe:nDup', ns).text.split('/')[-1])
+                vencimento = dup.find('nfe:dVenc', ns).text
+                valor = float(dup.find('nfe:vDup', ns).text)
 
-        if produto_existente:
-            cursor.execute(''' 
-                UPDATE produtos
-                SET qtd_estoque = qtd_estoque + ?, custo = ?
-                WHERE cod = ?
-            ''', (quantidade, valor_unitario, cod_produto))
-            st.write(f"Produto {cod_produto} atualizado com {quantidade} unidades no estoque.")
-        else:
-            cursor.execute('''
-                INSERT INTO produtos (cod, descricao, fabricante, fornecedor, unidade, qtd_estoque, custo, margem, preco, observacao, qtd_minima)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ''', (cod_produto, descricao_produto, fabricante_produto, nome_fornecedor, unidade_produto, quantidade, valor_unitario, margem_lucro, preco_venda, observacao, qtd_minima))
-            st.write(f"Produto {cod_produto} cadastrado com {quantidade} unidades, custo de R$ {valor_unitario:.2f}, e preço de venda de R$ {preco_venda:.2f}.")
+                cursor.execute('''
+                    INSERT INTO contas_a_pagar (cod_fornecedor, nome_fornecedor, data_entrada, vencimento, numero_documento, parcela, valor)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                ''', (cod_fornecedor, nome_fornecedor, data_entrada, vencimento, numero_documento, parcela, valor))
+                st.write(f"Parcela {parcela} inserida com vencimento em {vencimento} e valor R$ {valor:.2f}.")
 
-    conn.commit()
-    conn.close()
+            conn.commit()
+            conn.close()
+            st.success("NF-e processada com sucesso!")
 
-    st.success("Entrada de NF-e realizada com sucesso!")
+        except Exception as e:
+            st.error(f"Erro ao processar o XML: {e}")
 
 def exibir_produto_atual():
     if 'indice_produto' not in st.session_state:
@@ -288,31 +320,125 @@ def exibir_produto_atual():
         conn.commit()
         conn.close()
 
-        st.success("Produto atualizado com sucesso!")   
+        st.success("Produto atualizado com sucesso!")  
 
 def exibir_resultados_pesquisa(produtos):
-    if len(produtos) > 0:
-        for produto in produtos:
-            produtos_df = pd.DataFrame(produtos, columns=["ID", "Código", "Descrição", "Fabricante", "Fornecedor", "Unidade", "Quantidade atual", "Custo", "Margem", "Preço", "Observação", "Quantidade mínima"])
-            produtos_df = produtos_df.drop(columns=['ID'])
-            produtos_df = produtos_df.drop(columns=['Observação'])
-            produtos_df = produtos_df.drop(columns=['Quantidade mínima'])
-            produtos_df['Custo'] = produtos_df['Custo'].apply(lambda x: formatar_contabil(x))
-            produtos_df['Preço'] = produtos_df['Preço'].apply(lambda x: formatar_contabil(x))
-            produtos_df['Margem'] = produtos_df['Margem'].apply(lambda x: formatar_margem(x))
-            st.dataframe(produtos_df. style)
-    else:
-        st.write("Nenhum produto encontrado.")
+    if not produtos:
+        st.warning("Nenhum produto encontrado.")
+        return
+
+    if st.session_state.indice_produto >= len(produtos):
+        st.session_state.indice_produto = 0
+    elif st.session_state.indice_produto < 0:
+        st.session_state.indice_produto = len(produtos) - 1
+
+    produto_atual = produtos[st.session_state.indice_produto]
+    col1, col2, col3 = st.columns([1, 1, 3])
+    
+    with col1:
+        if st.button("←", use_container_width=True, key="left_button"):
+            if st.session_state.indice_produto > 0:
+                st.session_state.indice_produto -= 1
+                st.rerun()
+
+    with col2:
+        if st.button("→", use_container_width=True, key="right_button"):
+            if st.session_state.indice_produto < len(produtos) - 1:
+                st.session_state.indice_produto += 1
+                st.rerun()
+    
+    with col3:
+        if st.button('Voltar', use_container_width=True, key="voltar_button"):
+            st.session_state.page = 'Etq'
+            st.rerun()
+
+    col1, col2 = st.columns([2, 5])
+    with col1:
+        cod = st.text_input("Código", produto_atual[1], key=f"codigo_{produto_atual[0]}")
+    with col2:
+        descricao = st.text_input("Descrição", produto_atual[2], key=f"descricao_{produto_atual[0]}")
+
+    col1, col2, col3, col4, col5 = st.columns(5)
+    with col1:
+        fabricante = st.text_input("Fabricante", produto_atual[3], key=f"fabricante_{produto_atual[0]}")
+    with col2:
+        fornecedor = st.text_input("Fornecedor", produto_atual[4], key=f"fornecedor_{produto_atual[0]}")
+    with col3:
+        unidade = st.text_input("Unidade", produto_atual[5], key=f"unidade_{produto_atual[0]}")
+    with col4:
+        qtd_minima = st.number_input("Quantidade mínima", value=produto_atual[11], min_value=0, key=f"qtd_minima_{produto_atual[0]}")
+    with col5:
+        qtd_estoque = st.number_input("Quantidade atual", value=produto_atual[6], min_value=0, key=f"qtd_estoque_{produto_atual[0]}")
+
+    col1, col2, col3 = st.columns(3)
+    with col1:    
+        custo = st.number_input("Custo", value=produto_atual[7], min_value=0.0, format="%.2f", key=f"custo_{produto_atual[0]}")
+    with col2:
+        preco = st.number_input("Preço", value=produto_atual[9], min_value=0.0, format="%.2f", key=f"preco_{produto_atual[0]}")
+    with col3:
+        margem_calculada = calcular_margem(custo, preco)
+        margem = st.number_input("Margem", value=margem_calculada, min_value=0.0, format="%.2f", disabled=True, key=f"margem_{produto_atual[0]}")
+
+    observacao = st.text_area("Observação", produto_atual[10], height=150, key=f"observacao_{produto_atual[0]}")
+
+    if st.button('Salvar Alterações', use_container_width=True, key=f"salvar_{produto_atual[0]}"):
+        conn = conectar_db()
+        cursor = conn.cursor()
+        cursor.execute('''
+            UPDATE produtos
+            SET cod = ?, descricao = ?, fabricante = ?, fornecedor = ?, unidade = ?, qtd_estoque = ?, custo = ?, preco = ?, margem = ?, observacao = ?, qtd_minima = ?
+            WHERE id = ?
+        ''', (cod, descricao, fabricante, fornecedor, unidade, qtd_estoque, custo, preco, margem, observacao, qtd_minima, produto_atual[0]))
+        conn.commit()
+        conn.close()
+        st.success("Produto atualizado com sucesso!")
 
 def tela_pesquisa():
     st.subheader("Pesquisar Produtos")
 
     pesquisa = st.text_input("Digite o código ou descrição do produto")
-
     if pesquisa:
-        if st.button("Pesquisar"):
-            produtos_encontrados = pesquisar_produtos(pesquisa)
-            exibir_resultados_pesquisa(produtos_encontrados)
+        produtos_encontrados = pesquisar_produtos(pesquisa)
+        exibir_resultados_pesquisa(produtos_encontrados)
+ 
+def enviar_email(pdf_file, fornecedor_cod):
+    conn = conectar_db()
+    cursor = conn.cursor()
+    cursor.execute('SELECT email FROM cadastro_fornecedores WHERE cod_fornecedor = ?', (fornecedor_cod,))
+    fornecedor = cursor.fetchone()
+
+    if fornecedor:
+        email_fornecedor = fornecedor[0]
+    else:
+        st.error('Fornecedor não encontrado no banco de dados.')
+        return
+
+    remetente = 'seu_email@gmail.com'
+    destinatario = email_fornecedor
+    assunto = 'Pedido de Compra'
+    corpo = 'Segue anexo o pedido de compra em PDF.'
+
+    mensagem = MIMEMultipart()
+    mensagem['From'] = remetente
+    mensagem['To'] = destinatario
+    mensagem['Subject'] = assunto
+
+    pdf_attachment = MIMEBase('application', 'octet-stream')
+    pdf_attachment.set_payload(pdf_file)
+    encoders.encode_base64(pdf_attachment)
+    pdf_attachment.add_header('Content-Disposition', 'attachment; filename="pedido.pdf"')
+    mensagem.attach(pdf_attachment)
+
+    try:
+        with smtplib.SMTP('smtp.example.com', 587) as server:
+            server.starttls()
+            server.login(remetente, 'sua_senha')
+            server.send_message(mensagem)
+        st.success('Pedido enviado por email com sucesso!')
+    except Exception as e:
+        st.error(f'Erro ao enviar email: {e}')
+    finally:
+        conn.close()
 
 col1, col2, col3 = st.columns(3)
 
@@ -404,9 +530,6 @@ if st.session_state.page == 'list':
 
 if st.session_state.page == 'pesq':
     tela_pesquisa()
-    if st.button('Voltar', use_container_width=True):
-        st.session_state.page = 'Etq'
-        st.rerun()
 
 if st.session_state.page == 'apagar':
     st.write('\n')
@@ -469,8 +592,21 @@ if st.session_state.page == 'PedC':
         )
         
     with col2:
-        st.button('Enviar por Email', use_container_width=True, key='ev_email')
+        if st.button('Enviar por Email', use_container_width=True, key='ev_email'):
+            conn = conectar_db()
+            cursor = conn.cursor()
+            cursor.execute('''
+                SELECT cod_fornecedor FROM cadastro_fornecedores 
+                WHERE cod_fornecedor = ? OR nome_fornecedor LIKE ? 
+            ''', (pesquisa_fornecedor, '%' + pesquisa_fornecedor + '%'))
+            fornecedor = cursor.fetchone()
+            conn.close()
 
+            if fornecedor:
+                fornecedor_cod = fornecedor[0]
+                enviar_email(pdf_file, fornecedor_cod)
+            else:
+                st.error('Fornecedor não encontrado.')
     with col3:
         st.write('')
     
@@ -488,29 +624,4 @@ if st.session_state.page == 'PedC':
         st.dataframe(produtos_df.style)
 
 if st.session_state.page == 'Ent':
-    st.header('Entrada')
-    exibir_data_atual()
-    st.subheader("Entrada de NF-e com XML")
-
-    pesquisar_fornecedor()
-
-    input_option = st.radio("Escolha como deseja inserir o XML:", ("Carregar arquivo", "Digitar manualmente"))
-
-    if input_option == "Carregar arquivo":
-        uploaded_file = st.file_uploader("Carregue o arquivo XML da NF-e", type=["xml"])
-        if uploaded_file is not None:
-            conteudo_xml = uploaded_file.read().decode("utf-8")
-            fornecedor = pesquisar_fornecedor()
-            if fornecedor:
-                entrada_nfe(conteudo_xml, fornecedor)
-
-    elif input_option == "Digitar manualmente":
-        conteudo_xml = st.text_area("Cole o conteúdo do XML da NF-e aqui:")
-        if conteudo_xml:
-            fornecedor = pesquisar_fornecedor()
-            if fornecedor:
-                entrada_nfe(conteudo_xml, fornecedor)
-
-
-
-    
+    processar_xml_nfe()

@@ -5,7 +5,15 @@ import pandas as pd
 import datetime
 
 def conectar_db():
-    return sqlite3.connect('produtos.db')
+    return sqlite3.connect('banco.db')
+
+def calcular_margem(custo, preco):
+    try:
+        if custo == 0:
+            return 0
+        return ((preco - custo) / custo) * 100
+    except ValueError:
+        return 0 
 
 def inserir_cliente_pf(cod, nome, cpf, rg, data_nascimento, filiacao, endereco, numero, cep, bairro, cidade, estado, complemento, telefone, celular, email, observacao):
     conn = conectar_db()
@@ -27,13 +35,13 @@ def inserir_cliente_pj(cod, razao_social, cnpj, inscricao_estadual, endereco, nu
     conn.commit()
     conn.close()
 
-def inserir_fornecedor(cod, nome_fornecedor, cnpj, inscricao_estadual, endereco, numero, cep, bairro, cidade, estado, complemento, telefone, celular, email, observacao):
+def inserir_fornecedor(cod, nome_fornecedor, cnpj, inscricao_estadual, endereco, numero, cep, bairro, cidade, estado, telefone, celular, email, contato, observacao):
     conn = conectar_db()
     cursor = conn.cursor()
     cursor.execute('''
-        INSERT INTO fornecedores (cod_fornecedor, nome_fornecedor, cnpj, inscricao_estadual, endereco, numero, cep, bairro, cidade, estado, complemento, telefone, celular, email, observacao)
+        INSERT INTO cadastro_fornecedores (cod_fornecedor, nome_fornecedor, cnpj, inscricao_estadual, endereco, numero, cep, bairro, cidade, estado, telefone, celular, email, contato, observacao)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    ''', (cod, nome_fornecedor, cnpj, inscricao_estadual, endereco, numero, cep, bairro, cidade, estado, complemento, telefone, celular, email, observacao))
+    ''', (cod, nome_fornecedor, cnpj, inscricao_estadual, endereco, numero, cep, bairro, cidade, estado, telefone, celular, email, contato, observacao))
     conn.commit()
     conn.close()
 
@@ -101,21 +109,194 @@ def pesquisar_clientes_pj(pesquisa):
     return clientes_pj
 
 def exibir_resultados_pesquisa_pf(clientes):
-    if len(clientes) > 0:
-        clientes_df = pd.DataFrame(clientes, columns=["ID", "Código", "Nome", "CPF", "RG", "Endereço", "Número", "CEP", "Bairro", "Cidade", "Estado", "Complemento", "Telefone", "Celular", "Data Nascimento", "Filiação", "Email", "Observação"])
-        clientes_df = clientes_df.drop(columns=['ID', 'Observação'])
-        clientes_df['Data Nascimento'] = clientes_df['Data Nascimento'].apply(lambda x: formatar_data(x))
-        st.dataframe(clientes_df.style)
-    else:
-        st.write("Nenhum cliente encontrado.")
+    if not clientes:
+        return
+
+    if st.session_state.indice_cliente >= len(clientes):
+        st.session_state.indice_cliente = 0
+    elif st.session_state.indice_cliente < 0:
+        st.session_state.indice_cliente = len(clientes) - 1
+
+    cliente_atual = clientes[st.session_state.indice_cliente]
+
+    col1, col2, col3 = st.columns([1, 1, 3])
+    
+    with col1:
+        if st.button("←", use_container_width=True, key="left_button"):
+            if st.session_state.indice_cliente > 0:
+                st.session_state.indice_cliente -= 1
+                st.rerun()
+
+    with col2:
+        if st.button("→", use_container_width=True, key="right_button"):
+            if st.session_state.indice_cliente < len(clientes) - 1:
+                st.session_state.indice_cliente += 1
+                st.rerun()
+    
+    with col3:
+        if st.button('Voltar', use_container_width=True, key="voltar_button"):
+            st.session_state.page = 'cli'
+            st.rerun()
+
+    col1, col2 = st.columns([2,4])
+
+    with col1:
+        cod_cli = st.text_input('Código', cliente_atual[1], key=f"cod_cli_{cliente_atual[0]}")
+    with col2:
+        nome_cli = st.text_input('Nome', cliente_atual[2], key=f"nome_cli_{cliente_atual[0]}")
+
+    col1, col2, col3, col4 = st.columns(4)
+
+    with col1:
+        cpf_cli = st.text_input('CPF', cliente_atual[3], key=f"cpf_cli_{cliente_atual[0]}")
+    with col2:
+        rg_cli = st.text_input('RG', cliente_atual[4], key=f"rg_cli_{cliente_atual[0]}")
+    with col3:
+        try:
+            data_nascimento_cli = datetime.datetime.strptime(cliente_atual[14], '%Y-%m-%d').date()
+        except ValueError:
+            data_nascimento_cli = None
+        data_nascimento_cli = st.date_input('Data de nascimento', data_nascimento_cli, key=f"data_nascimento_cli_{cliente_atual[0]}")
+    with col4:
+        filiacao_cli = st.text_input('Filiação', cliente_atual[15], key=f"filiacao_cli_{cliente_atual[0]}")
+
+    col1, col2, col3 = st.columns([4,2,2])
+
+    with col1:
+        endereco_cli = st.text_input('Endereço', cliente_atual[5], key=f"endereco_cli_{cliente_atual[0]}")
+    with col2:
+        numero_cli = st.text_input('Numero', cliente_atual[6], key=f"numero_cli_{cliente_atual[0]}")
+    with col3:
+        cep_cli = st.text_input('CEP', cliente_atual[7], key=f"cep_cli_{cliente_atual[0]}")
+
+    col1, col2, col3 = st.columns(3)
+
+    with col1:
+        bairro_cli = st.text_input('Bairro', cliente_atual[8], key=f"bairro_cli_{cliente_atual[0]}")
+    with col2:
+        cidade_cli = st.text_input('Cidade', cliente_atual[9], key=f"cidade_cli_{cliente_atual[0]}")
+    with col3:
+        estado_cli = st.text_input('Estado', cliente_atual[10], key=f"estado_cli_{cliente_atual[0]}")
+
+    col1, col2, col3 = st.columns(3)
+
+    with col1:
+        complemento_cli = st.text_input('Complemento', cliente_atual[11], key=f"complemento_cli_{cliente_atual[0]}")
+    with col2:
+        telefone_cli = st.text_input('Telefone', cliente_atual[12], key=f"telefone_cli_{cliente_atual[0]}")
+    with col3:
+        celular_cli = st.text_input('Celular', cliente_atual[13], key=f"celular_cli_{cliente_atual[0]}")
+    
+    email_cli = st.text_input('Email', cliente_atual[16], key=f"email_cli_{cliente_atual[0]}")
+    observacao_cli = st.text_area('Observação: ', cliente_atual[17], height=150, key=f"observacao_cli_{cliente_atual[0]}")
+
+    if st.button('Salvar Alterações', use_container_width=True):
+        conn = conectar_db()
+        cursor = conn.cursor()
+        cursor.execute('''
+            UPDATE cadastro_cliente_pessoa_fisica 
+            SET cod_cli = ?, nome_cli = ?, cpf_cli = ?, rg_cli = ?, endereco_cli = ?, numero_cli = ?, cep_cli = ?, bairro_cli = ?, cidade_cli = ?, estado_cli = ?, complemento_cli = ?, 
+                telefone_cli = ?, celular_cli = ?, data_nascimento_cli = ?, filiacao_cli = ?, email_cli = ?, observacao_cli = ? 
+            WHERE id = ?
+        ''', (cod_cli, nome_cli, cpf_cli, rg_cli, endereco_cli, numero_cli, cep_cli, bairro_cli, cidade_cli, estado_cli, complemento_cli, 
+                telefone_cli, celular_cli, data_nascimento_cli, filiacao_cli, email_cli, observacao_cli, st.session_state.indice_cliente + 1))
+            
+        conn.commit()
+        conn.close()
+
+        st.success("Cliente atualizado com sucesso!")
 
 def exibir_resultados_pesquisa_pj(clientes):
-    if len(clientes) > 0:
-        clientes_df = pd.DataFrame(clientes, columns=["ID", "Código", "Nome da Empresa", "Endereço", "Número", "Complemento", "CEP", "Bairro", "Cidade", "Estado", "CNPJ", "Inscrição Estadual", "Telefone", "Celular", "Contato", "Email", "Observação"])
-        clientes_df = clientes_df.drop(columns=['ID', 'Observação'])
-        st.dataframe(clientes_df.style)
-    else:
-        st.write("Nenhum cliente encontrado.")
+    if not clientes:
+        return
+
+    if st.session_state.indice_cliente >= len(clientes):
+        st.session_state.indice_cliente = 0
+    elif st.session_state.indice_cliente < 0:
+        st.session_state.indice_cliente = len(clientes) - 1
+
+    cliente_atual = clientes[st.session_state.indice_cliente]
+
+    col1, col2, col3 = st.columns([1, 1, 3])
+    
+    with col1:
+        if st.button("←", use_container_width=True, key="left_button"):
+            if st.session_state.indice_cliente > 0:
+                st.session_state.indice_cliente -= 1
+                st.rerun()
+
+    with col2:
+        if st.button("→", use_container_width=True, key="right_button"):
+            if st.session_state.indice_cliente < len(clientes) - 1:
+                st.session_state.indice_cliente += 1
+                st.rerun()
+    
+    with col3:
+        if st.button('Voltar', use_container_width=True, key="voltar_button"):
+            st.session_state.page = 'cli'
+            st.rerun()
+
+    col1, col2 = st.columns([2, 4])
+
+    with col1:
+        cod = st.text_input('Código', cliente_atual[1])
+    with col2:
+        razao_social = st.text_input('Razão Social', cliente_atual[2])
+
+    col1, col2, col3 = st.columns(3)
+
+    with col1:
+        cnpj = st.text_input('CNPJ', cliente_atual[3])
+    with col2:
+        inscricao_estadual = st.text_input('Inscrição Estadual', cliente_atual[4])
+    with col3:
+        contato = st.text_input('Contato', cliente_atual[5])
+
+    col1, col2, col3 = st.columns([4, 2, 2])
+
+    with col1:
+        endereco = st.text_input('Endereço', cliente_atual[6])
+    with col2:
+        numero = st.text_input('Numero', cliente_atual[7])
+    with col3:
+        cep = st.text_input('CEP', cliente_atual[8])
+
+    col1, col2, col3 = st.columns(3)
+
+    with col1:
+        bairro = st.text_input('Bairro', cliente_atual[9])
+    with col2:
+        cidade = st.text_input('Cidade', cliente_atual[10])
+    with col3:
+        estado = st.text_input('Estado', cliente_atual[11])
+
+    col1, col2, col3 = st.columns(3)
+
+    with col1:
+        complemento = st.text_input('Complemento', cliente_atual[12])
+    with col2:
+        telefone = st.text_input('Telefone', cliente_atual[13])
+    with col3:
+        celular = st.text_input('Celular', cliente_atual[14])
+
+    email = st.text_input('Email', cliente_atual[15])
+    observacao = st.text_area('Observação: ', cliente_atual[16], height=150, key='observacao_ju')
+
+    if st.button('Salvar Alterações', use_container_width=True, key='salvar_ju'):
+        conn = conectar_db()
+        cursor = conn.cursor()
+        cursor.execute('''
+            UPDATE cadastro_cliente_pessoa_juridica 
+                SET cod_cliente = ?, razao_social = ?, cnpj = ?, inscricao_estadual = ?, contato = ?, endereco = ?, numero = ?, cep = ?, bairro = ?, cidade = ?, estado = ?, 
+                    complemento = ?, telefone = ?, celular = ?, email = ?, observacao = ? 
+                WHERE id = ? 
+            ''', (cod, razao_social, cnpj, inscricao_estadual, contato, endereco, numero, cep, bairro, cidade, estado, 
+                    complemento, telefone, celular, email, observacao, st.session_state.indice_cliente + 1))
+            
+        conn.commit()
+        conn.close()
+
+        st.success("Cliente atualizado com sucesso!")
 
 def tela_pesquisa_clientes():
     st.subheader("Pesquisar Clientes")
@@ -140,15 +321,95 @@ def pesquisar_fornecedores(pesquisa):
     return fornecedores
 
 def exibir_resultados_pesquisa_fornecedores(fornecedores):
-    if len(fornecedores) > 0:
-        fornecedores_df = pd.DataFrame(fornecedores, columns=[
-            "ID", "Código do Fornecedor", "Nome do Fornecedor", "Endereço", "Número", "Bairro", "Cidade", "Estado", "CEP", 
-            "Telefone", "Celular", "CNPJ", "Inscrição Estadual", "Email", "Contato", "Observação"
-        ])
-        fornecedores_df = fornecedores_df.drop(columns=['ID', 'Observação'])
-        st.dataframe(fornecedores_df.style)
-    else:
-        st.write("Nenhum fornecedor encontrado.")
+    if not fornecedores:
+        st.warning("Não há fornecedores cadastrados.")
+        return
+
+    if st.session_state.indice_fornecedor >= len(fornecedores):
+        st.session_state.indice_fornecedor = 0
+    elif st.session_state.indice_fornecedor < 0:
+        st.session_state.indice_fornecedor = len(fornecedores) - 1
+
+    fornecedor_atual = fornecedores[st.session_state.indice_fornecedor]
+
+    col1, col2, col3 = st.columns([1, 1, 3])
+    
+    with col1:
+        if st.button("←", use_container_width=True, key="left_button"):
+            if st.session_state.indice_fornecedor > 0:
+                st.session_state.indice_fornecedor -= 1
+                st.rerun()
+
+    with col2:
+        if st.button("→", use_container_width=True, key="right_button"):
+            if st.session_state.indice_fornecedor < len(fornecedores) - 1:
+                st.session_state.indice_fornecedor += 1
+                st.rerun()
+    
+    with col3:
+        if st.button('Voltar', use_container_width=True, key="voltar_button"):
+            st.session_state.page = 'cli'
+            st.rerun()
+
+    col1, col2 = st.columns([2, 4])
+
+    with col1:
+        cod_fornecedor = st.text_input('Código', fornecedor_atual[1])
+    with col2:
+        nome_fornecedor = st.text_input('Razão social', fornecedor_atual[2])
+
+    col1, col2, col3 = st.columns(3)
+
+    with col1:
+        cnpj = st.text_input('CNPJ', fornecedor_atual[11])
+    with col2:
+        inscricao_estadual = st.text_input('Inscrição Estadual', fornecedor_atual[12])
+    with col3:
+        contato = st.text_input('Contato', fornecedor_atual[14])
+
+    col1, col2, col3 = st.columns([4,2,2])
+
+    with col1:
+        endereco = st.text_input('Endereço', fornecedor_atual[3])
+    with col2:
+        numero = st.text_input('Número', fornecedor_atual[4])
+    with col3:
+        cep = st.text_input('CEP', fornecedor_atual[8])
+
+    col1, col2, col3 = st.columns(3)
+
+    with col1:
+        bairro = st.text_input('Bairro', fornecedor_atual[5])
+    with col2:
+        cidade = st.text_input('Cidade', fornecedor_atual[6])
+    with col3:
+        estado = st.text_input('Estado', fornecedor_atual[7])
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+        telefone = st.text_input('Telefone', fornecedor_atual[9])
+    with col2:
+        celular = st.text_input('Celular', fornecedor_atual[10])
+
+    email = st.text_input('Email', fornecedor_atual[13])   
+    observacao = st.text_area('Observação', fornecedor_atual[15], height=150)
+
+    if st.button('Salvar Alterações', use_container_width=True):
+        conn = conectar_db()
+        cursor = conn.cursor()
+        cursor.execute('''
+            UPDATE cadastro_fornecedores 
+            SET cod_fornecedor = ?, nome_fornecedor = ?, endereco = ?, numero = ?, bairro = ?, cidade = ?, estado = ?, cep = ?, telefone = ?, celular = ?, 
+                cnpj = ?, inscricao_estadual = ?, email = ?, contato = ?, observacao = ? 
+            WHERE id = ?
+        ''', (cod_fornecedor, nome_fornecedor, endereco, numero, bairro, cidade, estado, cep, telefone, celular, 
+              cnpj, inscricao_estadual, email, contato, observacao, st.session_state.indice_fornecedor + 1))
+
+        conn.commit()
+        conn.close()
+
+        st.success("Fornecedor atualizado com sucesso!")
 
 def tela_pesquisa_fornecedores():
     st.subheader("Pesquisar Fornecedores")
@@ -706,11 +967,14 @@ if st.session_state.page == 'apagar_pj':
 
 if st.session_state.page == 'pesq':
     tela_pesquisa_clientes()
-    if st.button('Voltar', use_container_width=True):
-        st.session_state.page = 'cli'
-        st.rerun()
 
 if st.session_state.page == 'list_pf':
+    st.write('')
+    st.header('Listagem de Clientes PF')
+
+    if st.button('Voltar', use_container_width=True, key="voltar_button"):
+        st.session_state.page = 'cli'
+        st.rerun()
 
     clientes = listar_clientes_pf()
 
@@ -720,6 +984,12 @@ if st.session_state.page == 'list_pf':
     st.dataframe(clientes_df.style)
     
 if st.session_state.page == 'list_pj':
+    st.write('')
+    st.header('Listagem de Clientes PJ')
+
+    if st.button('Voltar', use_container_width=True, key="voltar_button"):
+        st.session_state.page = 'cli'
+        st.rerun()
 
     clientes = listar_clientes_pj()
     
@@ -781,52 +1051,52 @@ if st.session_state.page == 'incluir_for':
         col1, col2 = st.columns([2,4])
 
         with col1:
-            cod_for = st.text_input ('Codigo')
+            cod = st.text_input ('Codigo', value=gerar_codigo_aleatorio())
         with col2:
-            razao_social_for = st.text_input('Razão social')
+            razao_social = st.text_input('Razão social')
 
         col1, col2, col3 = st.columns(3)
 
         with col1:
-            cnpj_for = st.text_input('CNPJ')
+            cnpj = st.text_input('CNPJ')
         with col2:
-            inscricao_estadual_for = st.text_input('Inscriaçao Estadual')
+            inscricao_estadual = st.text_input('Inscriaçao Estadual')
         with col3:
-            contato_for = st.text_input('Contato')
+            contato = st.text_input('Contato')
 
         col1, col2, col3 = st.columns([4,2,2])
 
         with col1:
-            endereco_for = st.text_input('Endereço')
+            endereco = st.text_input('Endereço')
         with col2:
-            numero_for = st.text_input('Numero')
+            numero = st.text_input('Numero')
         with col3:
-            cep_for = st.text_input('CEP')
+            cep = st.text_input('CEP')
 
         col1, col2, col3 = st.columns(3)
 
         with col1:
-            bairro_for = st.text_input('Bairro')
+            bairro = st.text_input('Bairro')
         with col2:
-            cidade_for = st.text_input('Cidade')
+            cidade = st.text_input('Cidade')
         with col3:
-            estado_for = st.text_input('Estado')
+            estado = st.text_input('Estado')
 
         col1, col2 = st.columns(2)
 
         with col1:
-            telefone_for = st.text_input('Telefone')
+            telefone = st.text_input('Telefone')
         with col2:
-            celular_for = st.text_input('Celular')
+            celular = st.text_input('Celular')
 
-        email_comercial_for = st.text_input('Email')
-        observacao_for = st.text_area('Observação: ', height=150)
+        email_comercial = st.text_input('Email')
+        observacao = st.text_area('Observação: ', height=150)
 
         submit_botton = st.form_submit_button(label='cadastrar')
     
     if submit_botton:
-        if cod_for and razao_social_for and cnpj_for and inscricao_estadual_for and endereco_for and numero_for and cep_for and bairro_for and cidade_for and estado_for and telefone_for and celular_for and email_comercial_for:
-            inserir_fornecedor(cod_for, razao_social_for, cnpj_for, inscricao_estadual_for, endereco_for, numero_for, cep_for, bairro_for, cidade_for, estado_for, telefone_for, celular_for, email_comercial_for, observacao_for)
+        if cod and razao_social and cnpj and inscricao_estadual and endereco and numero and cep and bairro and cidade and estado and telefone and celular and email_comercial:
+            inserir_fornecedor(cod, razao_social, cnpj, inscricao_estadual, endereco, numero, cep, bairro, cidade, estado, telefone, celular, email_comercial, contato, observacao)
             st.success('Cadastro de Fornecedor realizado com sucesso!')
         else:
             st.error('Preencha todos os campos obrigatórios.')
@@ -878,12 +1148,17 @@ if st.session_state.page == 'pesq_for':
         st.rerun()
 
 if st.session_state.page == 'list_for':
+    st.write('')
+    st.header('Listagem de Fornecedores')
+
+    if st.button('Voltar', use_container_width=True, key="voltar_button"):
+        st.session_state.page = 'for'
+        st.rerun()
 
     fornecedores = listar_fornecedores()
 
-    fonecedores_df = pd.DataFrame(fornecedores, columns=["ID", "Código", "Nome", "CPF", "RG", "Endereço", "Número", "CEP", "Bairro", "Cidade", "Estado", "Complemento", "Telefone", "Celular", "Data Nascimento", "Filiação", "Email", "Observação"])
+    fonecedores_df = pd.DataFrame(fornecedores, columns=["ID", "Código", "Razão Social", "cnpj", "Inscrição E.", "Endereço", "Número", "bairro", "Cidade", "Estado", "CEP", "Telefone", "Celular", "Email", "Contato", "Observação"])
     fonecedores_df = fonecedores_df.drop(columns=['ID', 'Observação'])
-    fonecedores_df['Data Nascimento'] = fonecedores_df['Data Nascimento'].apply(lambda x: formatar_data(x))
     st.dataframe(fonecedores_df.style)
 
 if st.session_state.page == 'pro':
@@ -895,43 +1170,40 @@ if st.session_state.page == 'pro':
         col1, col2 = st.columns([2,4])
 
         with col1:
-            cod_pro = st.text_input('Codigo')
+            cod = st.text_input('Codigo')
         with col2:
-            descricao_pro = st.text_input('Descrição')
+            descricao = st.text_input('Descrição')
 
         col1, col2, col3 = st.columns([2,2,1])
 
         with col1:
-            frabricante_pro = st.text_input('Fabricante')
+            frabricante = st.text_input('Fabricante')
         with col2:
-            fornecedor_pro = st.text_input('Fornecedor')
+            fornecedor = st.text_input('Fornecedor')
         with col3:
-            unidade_pro = st.text_input('Unidade')
+            unidade = st.text_input('Unidade')
         
         col1, col2, col3, col4 = st.columns(4)
         
         with col1:
-            qtd_estoque_pro = st.text_input('Quantidade no estoque')
+            qtd_minima = st.text_input('Quantidade minima')
         with col2:
-            custo_pro = st.text_input('Custo')
+            custo = st.number_input('Custo', value=0.0, min_value=0.0, format="%.2f")  
         with col3:
-            margem_pro = st.text_input('Margem')
-        with col4:
-            preco_pro = st.text_input('Preço')
-        
-        observacao_pro = st.text_input('Observação')
-        qtd_minima_pro = st.text_input('Quantidade minima')
+            preco = st.number_input('Preço', value=0.0, min_value=0.0, format="%.2f")
 
+        margem_calculada = float(calcular_margem(custo, preco))
+        with col4:
+            margem = st.number_input("Margem", value=margem_calculada, min_value=0.0, format="%.2f", disabled=True)
+                   
+        observacao_pro = st.text_input('Observação')
+        
+        qtd_estoque_pro = '0'
 
         submit_botton = st.form_submit_button(label='cadastrar')
         
         if submit_botton:
-            if cod_pro and descricao_pro and frabricante_pro and fornecedor_pro and unidade_pro and qtd_estoque_pro and custo_pro and margem_pro and preco_pro and qtd_minima_pro:
-                st.success(f'Cadastro realizado com sucesso!')
-            else:
-                st.error('Preencha todos os campos de informação')
-            if cod_pro and descricao_pro and frabricante_pro and fornecedor_pro and unidade_pro and qtd_estoque_pro and custo_pro and margem_pro and preco_pro and qtd_minima_pro:
-                inserir_produto(cod_pro, descricao_pro, frabricante_pro, fornecedor_pro, unidade_pro, qtd_estoque_pro, custo_pro, margem_pro, preco_pro, observacao_pro, qtd_minima_pro)
-                st.success('Cadastro de Fornecedor realizado com sucesso!')
+            if cod and descricao and frabricante and fornecedor and unidade and qtd_estoque_pro and custo and margem and preco and qtd_minima:
+                inserir_produto(cod, descricao, frabricante, fornecedor, unidade, qtd_estoque_pro, custo, margem, preco, observacao_pro, qtd_minima)
             else:
                 st.error('Preencha todos os campos obrigatórios.')

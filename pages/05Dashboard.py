@@ -3,7 +3,7 @@ import sqlite3
 import xml.etree.ElementTree as ET
 
 def conectar_db():
-    return sqlite3.connect('produtos.db')
+    return sqlite3.connect('banco.db')
 
 def pesquisar_fornecedor():
     fornecedor_input = st.text_input("Digite o código ou nome do fornecedor:")
@@ -101,6 +101,22 @@ if st.session_state.page == 'Ent':
 xml_content = '''<?xml version="1.0" encoding="UTF-8"?>
 <NFe xmlns="http://www.portalfiscal.inf.br/nfe">
     <infNFe>
+        <emit>
+            <CNPJ>12345678000190</CNPJ>
+            <xNome>Construmart</xNome>
+            <enderEmit>
+                <xLgr>Av. Paulista</xLgr>
+                <nro>1234</nro>
+                <xBairro>Bela Vista</xBairro>
+                <cMun>3550308</cMun>
+                <xMun>São Paulo</xMun>
+                <UF>SP</UF>
+                <CEP>01310000</CEP>
+                <fone>1132345678</fone>
+            </enderEmit>
+            <IE>123456789112</IE>
+            <email>contato@construmart.com.br</email>
+        </emit>
         <ide>
             <nNF>12345</nNF>
             <dhEmi>2024-11-16T12:30:00-03:00</dhEmi>
@@ -108,33 +124,58 @@ xml_content = '''<?xml version="1.0" encoding="UTF-8"?>
         <det nItem="1">
             <prod>
                 <cProd>001</cProd>
-                <xProd>Produto A</xProd>
-                <uCom>10</uCom>
-                <qCom>5</qCom>
-                <vUnCom>50.00</vUnCom>
-                <vProd>250.00</vProd>
+                <xProd>Saco de Cimento 50kg</xProd>
+                <uCom>UN</uCom>
+                <qCom>10</qCom>
+                <vUnCom>35.00</vUnCom>
+                <vProd>350.00</vProd>
             </prod>
         </det>
         <det nItem="2">
             <prod>
                 <cProd>002</cProd>
-                <xProd>Produto B</xProd>
-                <uCom>1</uCom>
-                <qCom>3</qCom>
-                <vUnCom>30.00</vUnCom>
-                <vProd>90.00</vProd>
+                <xProd>Tijolo Maciço</xProd>
+                <uCom>UN</uCom>
+                <qCom>1000</qCom>
+                <vUnCom>0.75</vUnCom>
+                <vProd>750.00</vProd>
+            </prod>
+        </det>
+        <det nItem="3">
+            <prod>
+                <cProd>003</cProd>
+                <xProd>Bloco de Concreto 14x19x39cm</xProd>
+                <uCom>UN</uCom>
+                <qCom>500</qCom>
+                <vUnCom>4.50</vUnCom>
+                <vProd>2250.00</vProd>
+            </prod>
+        </det>
+        <det nItem="4">
+            <prod>
+                <cProd>004</cProd>
+                <xProd>Areia Lavada (m³)</xProd>
+                <uCom>M3</uCom>
+                <qCom>15</qCom>
+                <vUnCom>80.00</vUnCom>
+                <vProd>1200.00</vProd>
+            </prod>
+        </det>
+        <det nItem="5">
+            <prod>
+                <cProd>005</cProd>
+                <xProd>Ferro CA-50 12mm (barra 12m)</xProd>
+                <uCom>UN</uCom>
+                <qCom>20</qCom>
+                <vUnCom>120.00</vUnCom>
+                <vProd>2400.00</vProd>
             </prod>
         </det>
         <cobr>
             <dup>
                 <nDup>001/1</nDup>
                 <dVenc>2024-12-01</dVenc>
-                <vDup>250.00</vDup>
-            </dup>
-            <dup>
-                <nDup>002/1</nDup>
-                <dVenc>2024-12-15</dVenc>
-                <vDup>90.00</vDup>
+                <vDup>6950.00</vDup>
             </dup>
         </cobr>
     </infNFe>
