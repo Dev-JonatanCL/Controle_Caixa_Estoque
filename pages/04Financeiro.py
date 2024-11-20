@@ -1,17 +1,22 @@
 import streamlit as st
 import sqlite3
 import pandas as pd
-import datetime
+from datetime import datetime
+import locale
 
 def conectar_db():
     return sqlite3.connect('banco.db')
 
+def formatar_contabil(valor):
+    return locale.currency(valor, grouping=True)
+
 def formatar_data(data_str):
     try:
-        data = datetime.datetime.strptime(data_str, '%Y-%m-%d').date()
+        data = datetime.strptime(data_str, '%Y-%m-%d').date()       
         return data.strftime('%d/%m/%Y')
     except ValueError:
         return None
+
 def inserir_conta(cod, nome, data_entrada, vencimento, num_documento, parcela, valor):
     conn = conectar_db()
     cursor = conn.cursor()
@@ -25,7 +30,7 @@ def inserir_conta(cod, nome, data_entrada, vencimento, num_documento, parcela, v
 def listar_contas_a_pagar():
     conn = conectar_db()
     cursor = conn.cursor()
-    cursor.execute("SELECT * FROM contas_a_pagar")
+    cursor.execute(''' SELECT * FROM contas_a_pagar ''')
     contas_a_pagar = cursor.fetchall()
     conn.close()
     return contas_a_pagar
@@ -41,7 +46,7 @@ def listar_contas_pagas():
 def buscar_fornecedores():
     conn = conectar_db()
     cursor = conn.cursor()
-    cursor.execute("SELECT id, nome_fornecedor FROM cadastro_fornecedores")
+    cursor.execute(''' SELECT id, nome_fornecedor FROM cadastro_fornecedores ''')
     fornecedores = cursor.fetchall()
     conn.close()
     return fornecedores
@@ -88,7 +93,13 @@ def tela_pesquisa_pagar():
     pesquisa = st.text_input("Digite o N° do documento ou data da entrada para pesquisar: ")
 
     if pesquisa:
-        pagar_encontradas = pesquisar_pagar(pesquisa)
+        try:
+            data_pesquisa = datetime.strptime(pesquisa, '%d/%m/%Y').date()
+            data_pesquisa_formato_banco = data_pesquisa.strftime('%Y-%m-%d')
+            pagar_encontradas = pesquisar_pagar(data_pesquisa_formato_banco)
+        except ValueError:
+            pagar_encontradas = pesquisar_pagar(pesquisa)
+
         exibir_resultados_pesquisa_pagar(pagar_encontradas)
 
 def exibir_resultados_pesquisa_pagar(pagar):
@@ -128,12 +139,16 @@ def exibir_resultados_pesquisa_pagar(pagar):
         with col1:
             cod = st.text_input("Código do fornecedor", pagar_atual[1])
             nome = st.text_input("Nome do fornecedor", pagar_atual[2])
-            data_entrada = st.date_input("Data de Entrada", pagar_atual[3])
-            vencimento = st.date_input("Vencimento", pagar_atual[4])
+            data_entrada = datetime.strptime(pagar_atual[3], '%Y-%m-%d').date()
+            data_entrada_formatada = data_entrada.strftime('%d/%m/%Y')
+            st.text_input("Data de Entrada", data_entrada_formatada)
+            vencimento = datetime.strptime(pagar_atual[3], '%Y-%m-%d').date()
+            vencimento_formatada = vencimento.strftime('%d/%m/%Y')
+            st.text_input("Vencimento", vencimento_formatada)
         with col2:
             num_documento = st.text_input("Número do Documento", pagar_atual[5])
-            parcela = st.number_input("Parcela", pagar_atual[6], min_value=1, step=1)
-            valor = st.number_input("Valor", pagar_atual[7], min_value=0.0, step=0.01, format="%.2f")
+            parcela = st.number_input("Parcela", value=pagar_atual[6], min_value=1, step=1)
+            valor = st.number_input("Valor", value=pagar_atual[7], min_value=0.0, step=0.01, format="%.2f")
 
         data_quitacao = st.form_submit_button("Quitar")
 
@@ -190,14 +205,18 @@ def exibir_contas_a_pagar():
         col1, col2 = st.columns(2)
 
         with col1:
-            cod = st.text_input("Código do fornecedor", pagar[1])
+            cod = st.text_input("Código do fornecedor", pagar[1], disabled=True)
             nome = st.text_input("Nome do fornecedor", pagar[2])
-            data_entrada = st.date_input("Data de Entrada", pagar[3])
-            vencimento = st.date_input("Vencimento", pagar[4])
+            data_entrada = datetime.strptime(pagar[3], '%Y-%m-%d').date()
+            data_entrada_formatada = data_entrada.strftime('%d/%m/%Y')
+            st.text_input("Data de Entrada", data_entrada_formatada, disabled=True)
+            vencimento = datetime.strptime(pagar[4], '%Y-%m-%d').date()
+            vencimento_formatada = vencimento.strftime('%d/%m/%Y')
+            vencimento = st.text_input("Vencimento", vencimento_formatada)
         with col2:
-            num_documento = st.text_input("Número do Documento", pagar[5])
-            parcela = st.number_input("Parcela", pagar[6], min_value=1, step=1)
-            valor = st.number_input("Valor", pagar[7], min_value=0.0, step=0.01, format="%.2f")
+            num_documento = st.text_input("Número do Documento", pagar[5], disabled=True)
+            parcela = st.number_input("Parcela", value=pagar[6], min_value=1, step=1)
+            valor = st.number_input("Valor", value=pagar[7], min_value=0.0, step=0.01, format="%.2f")
 
         data_quitacao = st.form_submit_button("Quitar")
 
@@ -364,7 +383,11 @@ if st.session_state.page == 'list_pagar':
         st.rerun()
 
     pagar = listar_contas_a_pagar()
-    pagar_df = pd.DataFrame(pagar, columns=["Código", "Credor", "N° Documento", "Data Entrada", "Vencimento", "Parcela", "Valor"])
+    pagar_df = pd.DataFrame(pagar, columns=["ID", "Código", "Credor", "Data Entrada", "Vencimento", "N° Documento", "Parcela", "Valor", "data_quitacao"])
+    pagar_df = pagar_df.drop(columns=['ID', 'data_quitacao'])
+    pagar_df['Data Entrada'] = pagar_df['Data Entrada'].apply(lambda x: formatar_data(x))
+    pagar_df['Vencimento'] = pagar_df['Vencimento'].apply(lambda x: formatar_data(x))
+    pagar_df['Valor'] = pagar_df['Valor'].apply(lambda x: formatar_contabil(x))
 
     st.dataframe(pagar_df.style, use_container_width=True)
 
@@ -375,6 +398,10 @@ if st.session_state.page == 'pagas':
     tela_pesquisa_pagas()    
 
     pagas = listar_contas_pagas()
-    pagas_df = pd.DataFrame(pagas, columns=["Código", "Credor", "N° Documento", "Data Pagamento", "Vencimento", "Parcela", "Valor"])
+    pagas_df = pd.DataFrame(pagas, columns=["ID", "Código", "Credor", "Data Pagamento", "Vencimento", "N° Documento", "Parcela", "Valor"])
+    pagas_df = pagas_df.drop(columns=['ID'])
+    pagas_df['Data Pagamento'] = pagas_df['Data Pagamento'].apply(lambda x: formatar_data(x))
+    pagas_df['Vencimento'] = pagas_df['Vencimento'].apply(lambda x: formatar_data(x))
+    pagas_df['Valor'] = pagas_df['Valor'].apply(lambda x: formatar_contabil(x))
 
     st.dataframe(pagas_df.style, use_container_width=True)

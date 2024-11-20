@@ -141,54 +141,54 @@ def exibir_resultados_pesquisa_pf(clientes):
     col1, col2 = st.columns([2,4])
 
     with col1:
-        cod_cli = st.text_input('Código', cliente_atual[1], key=f"cod_cli_{cliente_atual[0]}")
+        cod_cli = st.text_input('Código', cliente_atual[1])
     with col2:
-        nome_cli = st.text_input('Nome', cliente_atual[2], key=f"nome_cli_{cliente_atual[0]}")
+        nome_cli = st.text_input('Nome', cliente_atual[2])
 
     col1, col2, col3, col4 = st.columns(4)
 
     with col1:
-        cpf_cli = st.text_input('CPF', cliente_atual[3], key=f"cpf_cli_{cliente_atual[0]}")
+        cpf_cli = st.text_input('CPF', cliente_atual[3])
     with col2:
-        rg_cli = st.text_input('RG', cliente_atual[4], key=f"rg_cli_{cliente_atual[0]}")
+        rg_cli = st.text_input('RG', cliente_atual[4])
     with col3:
         try:
             data_nascimento_cli = datetime.datetime.strptime(cliente_atual[14], '%Y-%m-%d').date()
         except ValueError:
             data_nascimento_cli = None
-        data_nascimento_cli = st.date_input('Data de nascimento', data_nascimento_cli, key=f"data_nascimento_cli_{cliente_atual[0]}")
+        data_nascimento_cli = st.date_input('Data de nascimento', data_nascimento_cli)
     with col4:
-        filiacao_cli = st.text_input('Filiação', cliente_atual[15], key=f"filiacao_cli_{cliente_atual[0]}")
+        filiacao_cli = st.text_input('Filiação', cliente_atual[15])
 
     col1, col2, col3 = st.columns([4,2,2])
 
     with col1:
-        endereco_cli = st.text_input('Endereço', cliente_atual[5], key=f"endereco_cli_{cliente_atual[0]}")
+        endereco_cli = st.text_input('Endereço', cliente_atual[5])
     with col2:
-        numero_cli = st.text_input('Numero', cliente_atual[6], key=f"numero_cli_{cliente_atual[0]}")
+        numero_cli = st.text_input('Numero', cliente_atual[6])
     with col3:
-        cep_cli = st.text_input('CEP', cliente_atual[7], key=f"cep_cli_{cliente_atual[0]}")
+        cep_cli = st.text_input('CEP', cliente_atual[7])
 
     col1, col2, col3 = st.columns(3)
 
     with col1:
-        bairro_cli = st.text_input('Bairro', cliente_atual[8], key=f"bairro_cli_{cliente_atual[0]}")
+        bairro_cli = st.text_input('Bairro', cliente_atual[8])
     with col2:
-        cidade_cli = st.text_input('Cidade', cliente_atual[9], key=f"cidade_cli_{cliente_atual[0]}")
+        cidade_cli = st.text_input('Cidade', cliente_atual[9])
     with col3:
-        estado_cli = st.text_input('Estado', cliente_atual[10], key=f"estado_cli_{cliente_atual[0]}")
+        estado_cli = st.text_input('Estado', cliente_atual[10])
 
     col1, col2, col3 = st.columns(3)
 
     with col1:
-        complemento_cli = st.text_input('Complemento', cliente_atual[11], key=f"complemento_cli_{cliente_atual[0]}")
+        complemento_cli = st.text_input('Complemento', cliente_atual[11])
     with col2:
-        telefone_cli = st.text_input('Telefone', cliente_atual[12], key=f"telefone_cli_{cliente_atual[0]}")
+        telefone_cli = st.text_input('Telefone', cliente_atual[12])
     with col3:
-        celular_cli = st.text_input('Celular', cliente_atual[13], key=f"celular_cli_{cliente_atual[0]}")
+        celular_cli = st.text_input('Celular', cliente_atual[13])
     
-    email_cli = st.text_input('Email', cliente_atual[16], key=f"email_cli_{cliente_atual[0]}")
-    observacao_cli = st.text_area('Observação: ', cliente_atual[17], height=150, key=f"observacao_cli_{cliente_atual[0]}")
+    email_cli = st.text_input('Email', cliente_atual[16])
+    observacao_cli = st.text_area('Observação: ', cliente_atual[17], height=150)
 
     if st.button('Salvar Alterações', use_container_width=True):
         conn = conectar_db()
