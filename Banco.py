@@ -25,8 +25,10 @@ def criar_banco_dados():
         CREATE TABLE IF NOT EXISTS caixa (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             data TEXT NOT NULL,
-            valor_em_caixa REAL NOT NULL,
-            valor_em_troco REAL NOT NULL,
+            valor_inicial REAL NOT NULL,
+            troco_inicial REAL NOT NULL,
+            valor_final REAL NOT NULL,
+            troco_final REAL NOT NULL,
             valor_sangria REAL NOT NULL
         )
     ''')
