@@ -92,7 +92,8 @@ def abrir_caixa(valor_digitado, valor_troco):
                       VALUES (?, ?, ?, ?, ?, ?)''', 
                    (data_atual, valor_digitado, valor_troco, valor_final, troco_final, 0.0))
     conn.commit()
-    
+    conn.close()
+
     st.session_state.valor_digitado = valor_digitado
     st.session_state.valor_troco = valor_troco
     st.session_state.sangria = 0.0
@@ -100,8 +101,8 @@ def abrir_caixa(valor_digitado, valor_troco):
     st.session_state.page = 'FecharCaixa'
     st.session_state.caixa_aberto = True
 
-def registrar_venda(valor_total, tipo_recebimento, cod_cliente, nome_cliente, frete):
-    data_atual = datetime.today().strftime('%d-%m-%y')
+def registrar_venda(data_atual, valor_total, tipo_recebimento, cod_cliente, nome_cliente, frete):
+    data_atual = datetime.today().strftime('%y-%m-%d')
 
     conn = conectar_db()
     cursor = conn.cursor() 
@@ -110,6 +111,8 @@ def registrar_venda(valor_total, tipo_recebimento, cod_cliente, nome_cliente, fr
                    (data_atual, tipo_recebimento, valor_total, cod_cliente, nome_cliente, frete))
     conn.commit()
     
+    venda_id = cursor.lastrowid
+
     if tipo_recebimento == 'dinheiro':
         st.session_state.vendas_em_dinheiro += valor_total
         cursor.execute('SELECT * FROM caixa WHERE data = ? ORDER BY id DESC LIMIT 1', (data_atual,))
@@ -120,6 +123,9 @@ def registrar_venda(valor_total, tipo_recebimento, cod_cliente, nome_cliente, fr
             conn.commit()
             
             st.session_state.valor_digitado = novo_valor_final
+
+    conn.close()
+    return venda_id
 
 def registrar_item_venda(id_venda, id_produto, quantidade, preco_unitario, valor_total):
     conn = conectar_db()
@@ -155,13 +161,13 @@ def finalizar_caixa(valor_em_caixa):
         cursor.execute('''UPDATE caixa SET valor_final = ?, troco_final = ? WHERE id = ?''',
                        (valor_final, troco_final, caixa_aberto[0]))
         conn.commit()
-
+        conn.close()
         st.session_state.caixa_aberto = False
 
     st.session_state.page = 'Ab/Fc'
 
 def efetuar_sangria(valor_sangria):
-    data_atual = datetime.today().strftime('%d-%m-%y')
+    data_atual = datetime.today().strftime('%y-%m-%d')
 
     conn = conectar_db()
     cursor = conn.cursor()
@@ -178,7 +184,7 @@ def efetuar_sangria(valor_sangria):
         cursor.execute('''UPDATE caixa SET valor_final = ?, valor_sangria = ? WHERE id = ?''', 
                        (novo_valor_final, novo_valor_sangria, caixa_aberto[0]))
         conn.commit()
-
+        conn.close()
         st.session_state.valor_digitado = novo_valor_final
         st.session_state.sangria = novo_valor_sangria
 
@@ -198,6 +204,7 @@ def adicionar_troco(valor_troco):
         cursor.execute('''UPDATE caixa SET valor_final = ?, troco_final = ? WHERE id = ?''', 
                        (novo_valor_final, novo_troco_final, caixa_aberto[0]))
         conn.commit()
+        conn.close()
 
         st.session_state.valor_digitado = novo_valor_final
         st.session_state.valor_troco = novo_troco_final
@@ -219,6 +226,7 @@ def guardar_troco(valor_guardado):
         cursor.execute('''UPDATE caixa SET valor_final = ?, troco_final = ? WHERE id = ?''',
                        (novo_valor_final, novo_troco_final, caixa_aberto[0]))
         conn.commit()
+        conn.close()
 
         st.session_state.valor_digitado = novo_valor_final
         st.session_state.valor_troco = novo_troco_final
@@ -228,7 +236,6 @@ def exibir_venda_atual():
     if 'indice_venda' not in st.session_state:
         st.session_state.indice_venda = 0
 
-    # Conexão com o banco e obtenção dos dados da venda
     conn = conectar_db()
     cursor = conn.cursor()
     cursor.execute('''
@@ -241,7 +248,6 @@ def exibir_venda_atual():
         conn.close()
         return
 
-    # Obtenção dos itens da venda
     cursor.execute('''
         SELECT iv.id, iv.id_produto, p.descricao, iv.quantidade, iv.preco_unitario, iv.valor_total
         FROM itens_venda iv
@@ -251,12 +257,13 @@ def exibir_venda_atual():
     itens_venda = cursor.fetchall()
     conn.close()
 
-    # Exibição dos dados da venda
     st.write("### Detalhes da Venda")
     col1, col2, col3 = st.columns(3)
 
     with col1:
-        data = st.text_input("Data", venda[1])
+        data = datetime.strptime(venda[1], '%d-%m-%y').date()
+        data_formatada = data.strftime('%y/%m/%d')
+        st.text_input("Data", data_formatada)
     with col2:
         tipo_recebimento = st.text_input("Tipo de Recebimento", venda[2])
     with col3:
@@ -274,35 +281,119 @@ def exibir_venda_atual():
     with col1:
         frete = st.number_input("Valor do Frete", value=venda[6], min_value=0.0, format="%.2f")
 
-    # Exibição dos itens da venda
     st.write("### Itens da Venda")
     if itens_venda:
-        df_itens = pd.DataFrame(itens_venda, columns=["ID", "ID Produto", "Descrição", "Quantidade", "Preço Unitário", "Valor Total"])
+        df_itens = pd.DataFrame(itens_venda, columns=["ID Produto", "Descrição", "Quantidade", "Preço Unitário", "Valor Total"])
         st.table(df_itens[["ID Produto", "Descrição", "Quantidade", "Preço Unitário", "Valor Total"]])
     else:
         st.warning("Nenhum item associado a esta venda.")
 
-    # Botão para salvar alterações
     if st.button('Salvar Alterações', use_container_width=True):
         conn = conectar_db()
         cursor = conn.cursor()
-
-        # Atualizar os dados da venda
         cursor.execute('''
             UPDATE venda
             SET data = ?, tipo_recebimento = ?, valor_total = ?, cod_cliente = ?, nome_cliente = ?, frete = ?
             WHERE id = ?
         ''', (data, tipo_recebimento, valor_total, cod_cliente, nome_cliente, frete, venda[0]))
 
-        # Atualizar os dados dos itens (se necessário, pode ser expandido para edição direta)
-        # O código para edição de itens individualmente não foi incluído neste exemplo,
-        # mas pode ser adicionado como botões para cada linha na tabela.
-
         conn.commit()
         conn.close()
 
         st.success("Venda atualizada com sucesso!")
 
+def pesquisar_venda(pesquisa):
+    conn = conectar_db()
+    cursor = conn.cursor()
+    cursor.execute(''' 
+        SELECT v.id, v.data, v.tipo_recebimento, v.valor_total, v.cod_cliente, v.nome_cliente, v.frete 
+        FROM venda v 
+        WHERE v.data LIKE ? OR v.nome_cliente LIKE ?
+    ''', ('%' + pesquisa + '%', '%' + pesquisa + '%'))
+    
+    vendas = cursor.fetchall()
+    vendas_com_itens = []
+    for venda in vendas:
+        cursor.execute('''
+            SELECT iv.id_produto, p.descricao, iv.quantidade, iv.preco_unitario, iv.valor_total 
+            FROM itens_venda iv
+            JOIN produtos p ON iv.id_produto = p.id
+            WHERE iv.id_venda = ?
+        ''', (venda[0],))
+        itens = cursor.fetchall()
+        vendas_com_itens.append((venda, itens))
+    
+    conn.close()
+    return vendas_com_itens
+
+def tela_pesquisa_venda():
+    pesquisa = st.text_input("Digite a data da venda ou nome do cliente para pesquisar: ")
+
+    if pesquisa:
+        try:
+            data_pesquisa = datetime.strptime(pesquisa, '%d/%m/%Y').date()
+            data_pesquisa_formato_banco = data_pesquisa.strftime('%Y-%m-%d')
+            vendas_encontradas = pesquisar_venda(data_pesquisa_formato_banco)
+        except ValueError:
+            vendas_encontradas = pesquisar_venda(pesquisa)
+            exibir_resultados_pesquisa_venda(vendas_encontradas)
+
+def exibir_resultados_pesquisa_venda(vendas):
+    if not vendas:
+        st.warning("Não há vendas efetuadas.")
+        return
+    
+    if st.session_state.indice_venda >= len(vendas):
+        st.session_state.indice_venda = 0
+    elif st.session_state.indice_venda < 0:
+        st.session_state.indice_venda = len(vendas) - 1
+
+    venda_atual, itens_venda = vendas[st.session_state.indice_venda]
+
+    st.write("### Detalhes da Venda")
+    col1, col2, col3 = st.columns(3)
+
+    with col1:
+        data = datetime.strptime(venda_atual[1], '%d-%m-%y').date()
+        data_formatada = data.strftime('%y/%m/%d')
+        st.text_input("Data", value=data_formatada)
+    with col2:
+        tipo_recebimento = st.text_input("Tipo de Recebimento", venda_atual[2])
+    with col3:
+        valor_total = st.number_input("Valor Total", value=venda_atual[3], min_value=0.0, format="%.2f")
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+        cod_cliente = st.text_input("Código do Cliente", venda_atual[4])
+    with col2:
+        nome_cliente = st.text_input("Nome do Cliente", venda_atual[5])
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+        frete = st.number_input("Valor do Frete", value=venda_atual[6], min_value=0.0, format="%.2f")
+
+    st.write("### Itens da Venda")
+    if itens_venda:
+        df_itens = pd.DataFrame(itens_venda, columns=["ID Produto", "Descrição", "Quantidade", "Preço Unitário", "Valor Total"])
+        st.table(df_itens)
+    else:
+        st.warning("Nenhum item associado a esta venda.")
+
+    if st.button('Salvar Alterações', use_container_width=True):
+        conn = conectar_db()
+        cursor = conn.cursor()
+        cursor.execute('''
+            UPDATE venda
+            SET data = ?, tipo_recebimento = ?, valor_total = ?, cod_cliente = ?, nome_cliente = ?, frete = ?
+            WHERE id = ?
+        ''', (data, tipo_recebimento, valor_total, cod_cliente, nome_cliente, frete, venda_atual[0]))
+
+        conn.commit()
+        conn.close()
+
+        st.success("Venda atualizada com sucesso!")
 
 cabecalho()
 
@@ -361,22 +452,23 @@ elif st.session_state.page == 'Venda':
     if "percentual_ajuste" not in st.session_state:
         st.session_state.percentual_ajuste = 0.0
 
-    with st.form("form_adicionar_produto"):
-        produtos = buscar_produto()
+    produtos = buscar_produto()
 
-        col1, col2 = st.columns([1, 4])
+    col1, col2 = st.columns([1, 4])
 
-        with col1:
-            quantidade = st.number_input("Quantidade desejada", min_value=1, value=1)
-        with col2:
-            opc_pro = ["Selecione um produto"] + [f"{produto[2]}" for produto in produtos]
-            descricao = st.selectbox("Descrição", opc_pro)
+    with col1:
+        quantidade = st.number_input("Quantidade desejada", min_value=1, value=1)
+    with col2:
+        opc_pro = ["Selecione um produto"] + [f"{produto[2]}" for produto in produtos]
+        descricao = st.selectbox("Descrição", opc_pro)
 
-        submit_buscar = st.form_submit_button("Adicionar Produto")
-        
-        if submit_buscar:
-            if produtos:
-                produto_selecionado = produtos[0]
+    submit_buscar = st.button("Adicionar Produto")
+
+    if submit_buscar:
+        if descricao != "Selecione um produto" and produtos:
+            produto_selecionado = next((produto for produto in produtos if produto[2] == descricao), None)
+
+            if produto_selecionado:
                 if quantidade <= produto_selecionado[6]:
                     preco = produto_selecionado[9]
                     st.session_state.produtos_venda.append({
@@ -392,73 +484,77 @@ elif st.session_state.page == 'Venda':
                     st.error("Quantidade maior do que disponível em estoque.")
             else:
                 st.warning("Produto não encontrado.")
+        else:
+            st.warning("Por favor, selecione um produto válido.")
 
     if st.session_state.produtos_venda:
         st.write("### Produtos na Venda")
         df_produtos = pd.DataFrame(st.session_state.produtos_venda)
-        total_produtos = df_produtos["Total"].sum()
+        st.session_state.total_produtos = df_produtos["Total"].sum()
 
         st.table(df_produtos[["Código", "Descrição", "Quantidade", "Preço Unitário", "Total"]])
-        st.write(f"Total dos Produtos: R${total_produtos:.2f}")
+        st.write(f"Total dos Produtos: R${st.session_state.total_produtos:.2f}")
+    else:
+        st.session_state.total_produtos = 0.0
+        st.write("Nenhum produto adicionado à venda.")
 
-    with st.form("form_dados_cliente"):
-        clientes = buscar_clientes()
-        opc_cli = ["Selecione um cliente"] + [f"{cliente[1]} ({cliente[2]})" for cliente in clientes]
-        nome_cliente = st.selectbox("Clientes", opc_cli)
+    clientes = buscar_clientes()
+    opc_cli = ["Selecione um cliente"] + [f"{cliente[1]} ({cliente[2]})" for cliente in clientes]
+    nome_cliente = st.selectbox("Clientes", opc_cli)
 
-        if nome_cliente == "Selecione um cliente" or not clientes:
-            codigo_cliente = ""
-            nome_cliente = ""
-        else:
-            indice_cliente = opc_cli.index(nome_cliente) - 1
-            codigo_cliente = clientes[indice_cliente][0]
+    if nome_cliente == "Selecione um cliente" or not clientes:
+        codigo_cliente = ""
+        nome_cliente = ""
+    else:
+        indice_cliente = opc_cli.index(nome_cliente) - 1
+        codigo_cliente = clientes[indice_cliente][0]
 
-        col1, col2, col3 = st.columns([2, 2, 4])
+    col1, col2, col3, col4 = st.columns(4)
 
-        with col1:
-            metodo_pagamento = st.selectbox("Método de Pagamento", ["Dinheiro", "Crédito", "Débito"])
-        with col2:
-            st.session_state.valor_frete = st.number_input("Valor do Frete", min_value=0.0, value=st.session_state.valor_frete, format="%.2f")
-        with col3:
-            st.session_state.percentual_ajuste = st.number_input("Desconto/Acréscimo (%)", min_value=-100.0, value=st.session_state.percentual_ajuste, step=0.1)
+    with col1:
+        metodo_pagamento = st.selectbox("Método de Pagamento", ["Dinheiro", "Crédito", "Débito"])
+    with col2:
+        st.session_state.valor_frete = st.number_input("Valor do Frete", min_value=0.0, value=st.session_state.valor_frete, format="%.2f")
+    with col3:
+        st.session_state.percentual_ajuste = st.number_input("Desconto/Acréscimo (%)", min_value=-100.0, value=st.session_state.percentual_ajuste, step=0.1)
+    with col4:
+        subtotal_com_frete = st.session_state.total_produtos + st.session_state.valor_frete
 
-        submit_venda = st.form_submit_button("Finalizar Compra")
-        
-        if submit_venda:
-            if st.session_state.produtos_venda:
-                subtotal = total_produtos + st.session_state.valor_frete
-                st.session_state.valor_final = subtotal * (1 + st.session_state.percentual_ajuste / 100)
+        st.session_state.valor_final = subtotal_com_frete * (1 + st.session_state.percentual_ajuste / 100)
+        valor_total_input = st.number_input("Valor Total", min_value=0.0, value=st.session_state.valor_final, format="%.2f")
 
-                venda_id = registrar_venda(
-                    data=datetime.now().strftime('%d-%m-%y'),
-                    tipo_recebimento=metodo_pagamento,
-                    valor_total=st.session_state.valor_final,
-                    cod_cliente=codigo_cliente,
-                    nome_cliente=nome_cliente,
-                    frete=st.session_state.valor_frete
+    submit_venda = st.button("Finalizar Compra")
+    
+    if submit_venda:
+        if st.session_state.produtos_venda:
+            venda_id = registrar_venda(
+                data_atual=datetime.now().strftime('%y-%m-%d'),
+                tipo_recebimento=metodo_pagamento,
+                valor_total=valor_total_input,
+                cod_cliente=codigo_cliente,
+                nome_cliente=nome_cliente,
+                frete=st.session_state.valor_frete
+            )
+            for item in st.session_state.produtos_venda:
+                registrar_item_venda(
+                    id_venda=venda_id,
+                    id_produto=item["id"],
+                    quantidade=item["Quantidade"],
+                    preco_unitario=item["Preço Unitário"],
+                    valor_total=item["Total"]
                 )
-
-                for item in st.session_state.produtos_venda:
-                    registrar_item_venda(
-                        id_venda=venda_id,
-                        id_produto=item["id"],
-                        quantidade=item["quantidade"],
-                        preco_unitario=item["preco_unitario"],
-                        valor_total=item["total_item"]
-                    )
-
-                st.success(f"Compra finalizada com sucesso! Venda ID: {venda_id}")
-                st.write(f"Subtotal: R${total_produtos:.2f}")
-                st.write(f"Frete: R${st.session_state.valor_frete:.2f}")
-                st.write(f"Percentual de Ajuste: {st.session_state.percentual_ajuste:.2f}%")
-                st.write(f"Valor Final: R${st.session_state.valor_final:.2f}")
-                
-                st.session_state.produtos_venda = []
-                st.session_state.valor_frete = 0.0
-                st.session_state.valor_final = 0.0
-                st.session_state.percentual_ajuste = 0.0
-            else:
-                st.warning("Nenhum produto adicionado à venda.")
+            st.success(f"Compra finalizada com sucesso! Venda ID: {venda_id}")
+            st.write(f"Subtotal: R${st.session_state.total_produtos:.2f}")
+            st.write(f"Frete: R${st.session_state.valor_frete:.2f}")
+            st.write(f"Percentual de Ajuste: {st.session_state.percentual_ajuste:.2f}%")
+            st.write(f"Valor Final: R${valor_total_input:.2f}")
+            
+            st.session_state.produtos_venda = []
+            st.session_state.valor_frete = 0.0
+            st.session_state.valor_final = 0.0
+            st.session_state.percentual_ajuste = 0.0
+        else:
+            st.warning("Nenhum produto adicionado à venda.")
 
 elif st.session_state.page == 'Orc':
     exibir_data_atual()
@@ -563,3 +659,35 @@ elif st.session_state.page == 'ListV':
             st.rerun()
 
     exibir_venda_atual()
+
+if st.session_state.page == 'apagar':
+    st.write('\n')
+    st.subheader('Deseja realmente apagar esta venda ?')
+
+    venda_atual = listar_venda()[st.session_state.indice_venda]
+    venda_id = venda_atual[0]
+
+    col1, col2, col3 = st.columns([2, 2, 4])
+
+    with col1:
+        if st.button('Apagar', use_container_width=True):
+            conn = conectar_db()
+            cursor = conn.cursor()
+            cursor.execute("DELETE FROM venda WHERE id = ?", (venda_id,))
+            conn.commit()
+            conn.close()
+
+            st.success(f"Venda {venda_id} apagada com sucesso!")
+            st.session_state.page = 'ListV'
+            st.rerun()
+
+    with col2:
+        if st.button('Cancelar', use_container_width=True):
+            st.session_state.page = 'ListV'
+            st.rerun()
+
+    with col3:
+        st.write('')
+
+if st.session_state.page == 'pesq':
+    tela_pesquisa_venda()
