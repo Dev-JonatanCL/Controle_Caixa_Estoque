@@ -3,13 +3,17 @@ import pandas as pd
 from datetime import datetime
 import sqlite3
 import random
+import locale
+
+def conectar_db():
+    return sqlite3.connect('banco.db')
 
 def exibir_data_atual():
     data_atual = datetime.now().strftime("%d/%m/%Y")
     st.markdown(f"<h1 style='text-align: left;'>{data_atual}</h1>", unsafe_allow_html=True)
 
-def conectar_db():
-    return sqlite3.connect('banco.db')
+def formatar_contabil(valor):
+    return locale.currency(valor, grouping=True)
 
 def listar_venda():
     conn = conectar_db()
@@ -76,7 +80,7 @@ def cabecalho():
         if st.button("Orçamentos", use_container_width=True):
             st.session_state.page = "Orc"
     with col4:
-        if st.button("Listagem de Vendas", use_container_width=True):
+        if st.button("Vendas", use_container_width=True):
             st.session_state.page = "ListV"
 
 def abrir_caixa(valor_digitado, valor_troco):
@@ -257,7 +261,6 @@ def exibir_venda_atual():
     itens_venda = cursor.fetchall()
     conn.close()
 
-    st.write("### Detalhes da Venda")
     col1, col2, col3 = st.columns(3)
 
     with col1:
@@ -281,9 +284,9 @@ def exibir_venda_atual():
     with col1:
         frete = st.number_input("Valor do Frete", value=venda[6], min_value=0.0, format="%.2f")
 
-    st.write("### Itens da Venda")
+    st.subheader("Itens da Venda")
     if itens_venda:
-        df_itens = pd.DataFrame(itens_venda, columns=["ID Produto", "Descrição", "Quantidade", "Preço Unitário", "Valor Total"])
+        df_itens = pd.DataFrame(itens_venda, columns=["ID", "ID Produto", "Descrição", "Quantidade", "Preço Unitário", "Valor Total"])
         st.table(df_itens[["ID Produto", "Descrição", "Quantidade", "Preço Unitário", "Valor Total"]])
     else:
         st.warning("Nenhum item associado a esta venda.")
@@ -331,12 +334,13 @@ def tela_pesquisa_venda():
 
     if pesquisa:
         try:
-            data_pesquisa = datetime.strptime(pesquisa, '%d/%m/%Y').date()
-            data_pesquisa_formato_banco = data_pesquisa.strftime('%Y-%m-%d')
-            vendas_encontradas = pesquisar_venda(data_pesquisa_formato_banco)
+            data_pesquisa = datetime.strptime(pesquisa, '%d/%m/%y').date()
+            data_pesquisa_formatada = data_pesquisa.strftime('%y-%m-%d')
+            vendas_encontradas = pesquisar_venda(data_pesquisa_formatada)
         except ValueError:
             vendas_encontradas = pesquisar_venda(pesquisa)
-            exibir_resultados_pesquisa_venda(vendas_encontradas)
+
+        exibir_resultados_pesquisa_venda(vendas_encontradas)
 
 def exibir_resultados_pesquisa_venda(vendas):
     if not vendas:
@@ -350,12 +354,29 @@ def exibir_resultados_pesquisa_venda(vendas):
 
     venda_atual, itens_venda = vendas[st.session_state.indice_venda]
 
-    st.write("### Detalhes da Venda")
+    col1, col2, col3 = st.columns([1, 1, 3])
+    
+    with col1:
+        if st.button("←", use_container_width=True, key="left_button"):
+            if st.session_state.indice_venda > 0:
+                st.session_state.indice_venda -= 1
+                st.rerun()
+    with col2:
+        if st.button("→", use_container_width=True, key="right_button"):
+            if st.session_state.indice_venda < len(vendas) - 1:
+                st.session_state.indice_venda += 1
+                st.rerun()
+
+    with col3:
+        if st.button('Voltar', use_container_width=True, key="voltar_button"):
+            st.session_state.page = 'ListV'
+            st.rerun()
+
     col1, col2, col3 = st.columns(3)
 
     with col1:
-        data = datetime.strptime(venda_atual[1], '%d-%m-%y').date()
-        data_formatada = data.strftime('%y/%m/%d')
+        data = datetime.strptime(venda_atual[1], '%y-%m-%d').date()
+        data_formatada = data.strftime('%d/%m/%y')
         st.text_input("Data", value=data_formatada)
     with col2:
         tipo_recebimento = st.text_input("Tipo de Recebimento", venda_atual[2])
@@ -374,7 +395,7 @@ def exibir_resultados_pesquisa_venda(vendas):
     with col1:
         frete = st.number_input("Valor do Frete", value=venda_atual[6], min_value=0.0, format="%.2f")
 
-    st.write("### Itens da Venda")
+    st.subheader("Itens da Venda")
     if itens_venda:
         df_itens = pd.DataFrame(itens_venda, columns=["ID Produto", "Descrição", "Quantidade", "Preço Unitário", "Valor Total"])
         st.table(df_itens)
@@ -394,6 +415,79 @@ def exibir_resultados_pesquisa_venda(vendas):
         conn.close()
 
         st.success("Venda atualizada com sucesso!")
+
+def listar_vendas_por_periodo(data_inicial, data_final):
+    conn = conectar_db()
+    cursor = conn.cursor()
+    cursor.execute('''
+        SELECT v.id, v.data, v.tipo_recebimento, v.valor_total, v.cod_cliente, v.nome_cliente, v.frete
+        FROM venda v
+        WHERE v.data BETWEEN ? AND ?
+    ''', (data_inicial, data_final))
+
+    vendas = cursor.fetchall()
+    vendas_com_itens = []
+    for venda in vendas:
+        cursor.execute('''
+            SELECT iv.id_produto, p.descricao, iv.quantidade, iv.preco_unitario, iv.valor_total
+            FROM itens_venda iv
+            JOIN produtos p ON iv.id_produto = p.id
+            WHERE iv.id_venda = ?
+        ''', (venda[0],))
+        itens = cursor.fetchall()
+        vendas_com_itens.append((venda, itens))
+
+    conn.close()
+    return vendas_com_itens
+
+def tela_pesquisa_venda_periodo():
+    data_inicial_default = datetime.today().date()
+    data_final_default = datetime.today().date()
+
+    data_inicial_formatada = data_inicial_default.strftime('%d/%m/%y')
+    data_final_formatada = data_final_default.strftime('%d/%m/%y')
+    data_inicial = st.text_input("Data Inicial", data_inicial_formatada)
+    data_final = st.text_input("Data Final", data_final_formatada)
+
+    if st.button('Pesquisar', use_container_width=True):
+        try:
+            data_inicial_obj = datetime.strptime(data_inicial, '%d/%m/%y').date()
+            data_final_obj = datetime.strptime(data_final, '%d/%m/%y').date()
+
+            if data_inicial_obj > data_final_obj:
+                st.error("A data inicial não pode ser maior que a data final.")
+            else:
+                data_inicial_formatada_banco = data_inicial_obj.strftime('%Y-%m-%d')
+                data_final_formatada_banco = data_final_obj.strftime('%Y-%m-%d')
+
+                vendas_encontradas = listar_vendas_por_periodo(data_inicial_formatada_banco, data_final_formatada_banco)
+                exibir_vendas_periodo(vendas_encontradas)
+        
+        except ValueError:
+            st.error("Formato de data inválido. Use o formato dd/mm/yy.")
+def exibir_vendas_periodo(vendas):
+    if not vendas:
+        st.warning("Não há vendas no período selecionado.")
+        return
+    
+    lista_vendas = []
+    for venda, itens in vendas:
+        for item in itens:
+            lista_vendas.append({
+                'ID Venda': venda[0],
+                'Data': datetime.strptime(venda[1], '%Y-%m-%d').strftime('%d/%m/%y'),
+                'Tipo de Recebimento': venda[2],
+                'Valor Total': formatar_contabil(venda[3]),
+                'Cliente': venda[5],
+                'Frete': formatar_contabil(venda[6]),
+                'Produto': item[1],
+                'Quantidade': item[2],
+                'Preço Unitário': formatar_contabil(item[3]),
+                'Valor Total do Item': formatar_contabil(item[4]),
+            })
+
+    vendas_df = pd.DataFrame(lista_vendas, columns=["ID Venda", "Data", "Tipo de Recebimento", "Valor Total", "Cliente", "Frete", "Produto", "Quantidade", "Preço Unitário", "Valor Total do Item"])
+    st.dataframe(vendas_df.style, use_container_width=True)
 
 cabecalho()
 
@@ -441,7 +535,7 @@ elif st.session_state.page == 'FecharCaixa':
             
 elif st.session_state.page == 'Venda':
     exibir_data_atual()
-    st.write("### Tela para Efetuar Venda")
+    st.subheader("Tela de Venda")
     
     if "produtos_venda" not in st.session_state:
         st.session_state.produtos_venda = []
@@ -488,7 +582,7 @@ elif st.session_state.page == 'Venda':
             st.warning("Por favor, selecione um produto válido.")
 
     if st.session_state.produtos_venda:
-        st.write("### Produtos na Venda")
+        st.subheader("Produtos na Venda")
         df_produtos = pd.DataFrame(st.session_state.produtos_venda)
         st.session_state.total_produtos = df_produtos["Total"].sum()
 
@@ -558,7 +652,7 @@ elif st.session_state.page == 'Venda':
 
 elif st.session_state.page == 'Orc':
     exibir_data_atual()
-    st.write("### Tela de Orçamentos")
+    st.subheader("Tela de Orçamentos")
     
     if "orcamento_produtos" not in st.session_state:
         st.session_state.orcamento_produtos = []
@@ -691,3 +785,13 @@ if st.session_state.page == 'apagar':
 
 if st.session_state.page == 'pesq':
     tela_pesquisa_venda()
+
+if st.session_state.page == 'list':
+    st.write('')
+    st.header('Listagem de Vendas por Período')
+
+    if st.button('Voltar', use_container_width=True, key="voltar_button"):
+        st.session_state.page = 'vendas'
+        st.rerun()
+
+    tela_pesquisa_venda_periodo()
