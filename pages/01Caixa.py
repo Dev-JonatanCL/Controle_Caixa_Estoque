@@ -12,6 +12,13 @@ def exibir_data_atual():
     data_atual = datetime.now().strftime("%d/%m/%Y")
     st.markdown(f"<h1 style='text-align: left;'>{data_atual}</h1>", unsafe_allow_html=True)
 
+def formatar_data(data_str):
+    try:
+        data = datetime.strptime(data_str, '%Y-%m-%d').date()
+        return data.strftime('%d/%m/%Y')
+    except ValueError:
+        return data_str
+
 def formatar_contabil(valor):
     return locale.currency(valor, grouping=True)
 
@@ -22,6 +29,14 @@ def listar_venda():
     venda = cursor.fetchall()
     conn.close()
     return venda
+
+def listar_orcamentos():
+    conn = conectar_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM orcamento")
+    orcamento = cursor.fetchall()
+    conn.close()
+    return orcamento
 
 def listar_itens_venda():
     conn = conectar_db()
@@ -106,7 +121,7 @@ def abrir_caixa(valor_digitado, valor_troco):
     st.session_state.caixa_aberto = True
 
 def registrar_venda(data_atual, valor_total, tipo_recebimento, cod_cliente, nome_cliente, frete):
-    data_atual = datetime.today().strftime('%y-%m-%d')
+    data_atual = datetime.today().strftime('%Y-%m-%d')
 
     conn = conectar_db()
     cursor = conn.cursor() 
@@ -171,7 +186,7 @@ def finalizar_caixa(valor_em_caixa):
     st.session_state.page = 'Ab/Fc'
 
 def efetuar_sangria(valor_sangria):
-    data_atual = datetime.today().strftime('%y-%m-%d')
+    data_atual = datetime.today().strftime('%Y-%m-%d')
 
     conn = conectar_db()
     cursor = conn.cursor()
@@ -264,8 +279,8 @@ def exibir_venda_atual():
     col1, col2, col3 = st.columns(3)
 
     with col1:
-        data = datetime.strptime(venda[1], '%d-%m-%y').date()
-        data_formatada = data.strftime('%y/%m/%d')
+        data = datetime.strptime(venda[1], '%Y-%m-%d').date()
+        data_formatada = data.strftime('%d/%m/%Y')
         st.text_input("Data", data_formatada)
     with col2:
         tipo_recebimento = st.text_input("Tipo de Recebimento", venda[2])
@@ -330,12 +345,15 @@ def pesquisar_venda(pesquisa):
     return vendas_com_itens
 
 def tela_pesquisa_venda():
+    st.write('\n')
+    st.subheader('Pesquisar Venda')
+
     pesquisa = st.text_input("Digite a data da venda ou nome do cliente para pesquisar: ")
 
     if pesquisa:
         try:
-            data_pesquisa = datetime.strptime(pesquisa, '%d/%m/%y').date()
-            data_pesquisa_formatada = data_pesquisa.strftime('%y-%m-%d')
+            data_pesquisa = datetime.strptime(pesquisa, '%d/%m/%Y').date()
+            data_pesquisa_formatada = data_pesquisa.strftime('%Y-%m-%d')
             vendas_encontradas = pesquisar_venda(data_pesquisa_formatada)
         except ValueError:
             vendas_encontradas = pesquisar_venda(pesquisa)
@@ -375,8 +393,8 @@ def exibir_resultados_pesquisa_venda(vendas):
     col1, col2, col3 = st.columns(3)
 
     with col1:
-        data = datetime.strptime(venda_atual[1], '%y-%m-%d').date()
-        data_formatada = data.strftime('%d/%m/%y')
+        data = datetime.strptime(venda_atual[1], '%Y-%m-%d').date()
+        data_formatada = data.strftime('%d/%m/%Y')
         st.text_input("Data", value=data_formatada)
     with col2:
         tipo_recebimento = st.text_input("Tipo de Recebimento", venda_atual[2])
@@ -420,74 +438,173 @@ def listar_vendas_por_periodo(data_inicial, data_final):
     conn = conectar_db()
     cursor = conn.cursor()
     cursor.execute('''
-        SELECT v.id, v.data, v.tipo_recebimento, v.valor_total, v.cod_cliente, v.nome_cliente, v.frete
-        FROM venda v
-        WHERE v.data BETWEEN ? AND ?
+        SELECT * FROM venda
+        WHERE data BETWEEN ? AND ?
     ''', (data_inicial, data_final))
 
     vendas = cursor.fetchall()
-    vendas_com_itens = []
-    for venda in vendas:
-        cursor.execute('''
-            SELECT iv.id_produto, p.descricao, iv.quantidade, iv.preco_unitario, iv.valor_total
-            FROM itens_venda iv
-            JOIN produtos p ON iv.id_produto = p.id
-            WHERE iv.id_venda = ?
-        ''', (venda[0],))
-        itens = cursor.fetchall()
-        vendas_com_itens.append((venda, itens))
-
     conn.close()
-    return vendas_com_itens
+
+    return vendas
 
 def tela_pesquisa_venda_periodo():
     data_inicial_default = datetime.today().date()
     data_final_default = datetime.today().date()
 
-    data_inicial_formatada = data_inicial_default.strftime('%d/%m/%y')
-    data_final_formatada = data_final_default.strftime('%d/%m/%y')
-    data_inicial = st.text_input("Data Inicial", data_inicial_formatada)
-    data_final = st.text_input("Data Final", data_final_formatada)
+    data_inicial = st.text_input("Data Inicial", data_inicial_default.strftime('%d/%m/%Y'))
+    data_final = st.text_input("Data Final", data_final_default.strftime('%d/%m/%Y'))
 
     if st.button('Pesquisar', use_container_width=True):
         try:
-            data_inicial_obj = datetime.strptime(data_inicial, '%d/%m/%y').date()
-            data_final_obj = datetime.strptime(data_final, '%d/%m/%y').date()
+            data_inicial = datetime.strptime(data_inicial, '%d/%m/%Y').date()
+            data_final = datetime.strptime(data_final, '%d/%m/%Y').date()
 
-            if data_inicial_obj > data_final_obj:
+            if data_inicial > data_final:
                 st.error("A data inicial não pode ser maior que a data final.")
             else:
-                data_inicial_formatada_banco = data_inicial_obj.strftime('%Y-%m-%d')
-                data_final_formatada_banco = data_final_obj.strftime('%Y-%m-%d')
+                data_inicial_formatada_banco = data_inicial.strftime('%Y-%m-%d')
+                data_final_formatada_banco = data_final.strftime('%Y-%m-%d')
 
                 vendas_encontradas = listar_vendas_por_periodo(data_inicial_formatada_banco, data_final_formatada_banco)
                 exibir_vendas_periodo(vendas_encontradas)
         
         except ValueError:
-            st.error("Formato de data inválido. Use o formato dd/mm/yy.")
+            st.error("Formato de data inválido.")
+            
 def exibir_vendas_periodo(vendas):
     if not vendas:
         st.warning("Não há vendas no período selecionado.")
         return
     
-    lista_vendas = []
-    for venda, itens in vendas:
-        for item in itens:
-            lista_vendas.append({
-                'ID Venda': venda[0],
-                'Data': datetime.strptime(venda[1], '%Y-%m-%d').strftime('%d/%m/%y'),
-                'Tipo de Recebimento': venda[2],
-                'Valor Total': formatar_contabil(venda[3]),
-                'Cliente': venda[5],
-                'Frete': formatar_contabil(venda[6]),
-                'Produto': item[1],
-                'Quantidade': item[2],
-                'Preço Unitário': formatar_contabil(item[3]),
-                'Valor Total do Item': formatar_contabil(item[4]),
-            })
+    vendas_df = pd.DataFrame(vendas, columns=["ID", "Data", "Tipo de recebimento", "Valor Total", "Código do Cliente", "Nome do Cliente", "Frete"])
+    vendas_df = vendas_df.drop(columns=['ID'])
 
-    vendas_df = pd.DataFrame(lista_vendas, columns=["ID Venda", "Data", "Tipo de Recebimento", "Valor Total", "Cliente", "Frete", "Produto", "Quantidade", "Preço Unitário", "Valor Total do Item"])
-    st.dataframe(vendas_df.style, use_container_width=True)
+    vendas_df['Data'] = vendas_df['Data'].apply(lambda x: formatar_data(x))
+    vendas_df['Valor Total'] = vendas_df['Valor Total'].apply(lambda x: formatar_contabil(x))
+    vendas_df['Frete'] = vendas_df['Frete'].apply(lambda x: formatar_contabil(x))
+    
+    st.dataframe(vendas_df.style)
+
+def exibir_orcamento_atual():
+    st.write('\n')
+    st.header("Orçamento Atual")
+
+    col1, col2, col3, col4, col5, col6 = st.columns([1,1,2,2,2,2])
+
+    with col1:
+        if st.button("←", use_container_width=True, key="left_button_orcamento"):
+            if st.session_state.indice_orcamento > 0:
+                st.session_state.indice_orcamento -= 1
+
+    with col2:
+        if st.button("→", use_container_width=True, key="right_button_orcamento"):
+            if st.session_state.indice_orcamento < len(listar_orcamentos()) - 1:
+                st.session_state.indice_orcamento += 1
+    
+    with col3:
+        if st.button('Incluir', use_container_width=True, key="incluir_orcamento_button"):
+            st.session_state.page = 'incluir_orcamento'
+            st.rerun()
+
+    with col4:
+        if st.button('Apagar', use_container_width=True, key="apagar_orcamento_button"):
+            st.session_state.page = 'apagar_orcamento'
+            st.rerun()
+
+    with col5:
+        if st.button('Pesquisar', use_container_width=True, key="pesquisar_orcamento_button"):
+            st.session_state.page = 'pesquisar_orcamento'
+            st.rerun()
+    with col6:
+        if st.button('Imprimir', use_container_width=True, key="imprimir_orcamento_button"):
+            st.session_state.page = 'imprimir_orcamento'
+            st.rerun()
+
+    if 'indice_orcamento' not in st.session_state:
+        st.session_state.indice_orcamento = 0
+
+    conn = conectar_db()
+    cursor = conn.cursor()
+    cursor.execute('''SELECT * FROM orcamento LIMIT 1 OFFSET ?''', (st.session_state.indice_orcamento,))
+    orcamento = cursor.fetchone()
+
+    if orcamento is None:
+        st.warning("Não há orçamentos cadastrados.")
+        conn.close()
+        return
+
+    cursor.execute('''
+        SELECT io.id, io.id_produto, p.descricao, io.quantidade, io.preco_unitario, io.valor_total
+        FROM itens_orcamento io
+        JOIN produtos p ON io.id_produto = p.id
+        WHERE io.id_orcamento = ?
+    ''', (orcamento[0],))
+    itens_orcamento = cursor.fetchall()
+    conn.close()
+
+    col1, col2, col3 = st.columns(3)
+
+    with col1:
+        data = datetime.strptime(orcamento[1], '%Y-%m-%d').date()
+        data_formatada = data.strftime('%d/%m/%Y')
+        st.text_input("Data do Orçamento", data_formatada)
+    with col2:
+        tipo_recebimento = st.text_input("Tipo de Recebimento", orcamento[2])
+    with col3:
+        valor_total = st.number_input("Valor Total", value=orcamento[3], min_value=0.0, format="%.2f")
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+        cod_cliente = st.text_input("Código do Cliente", orcamento[4])
+    with col2:
+        nome_cliente = st.text_input("Nome do Cliente", orcamento[5])
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+        frete = st.number_input("Valor do Frete", value=orcamento[6], min_value=0.0, format="%.2f")
+
+    st.subheader("Itens do Orçamento")
+    if itens_orcamento:
+        df_itens = pd.DataFrame(itens_orcamento, columns=["ID", "ID Produto", "Descrição", "Quantidade", "Preço Unitário", "Valor Total"])
+        st.table(df_itens[["ID Produto", "Descrição", "Quantidade", "Preço Unitário", "Valor Total"]])
+    else:
+        st.warning("Nenhum item associado a este orçamento.")
+
+    if st.button('Salvar Alterações', use_container_width=True):
+        conn = conectar_db()
+        cursor = conn.cursor()
+        cursor.execute('''
+            UPDATE orcamento
+            SET data = ?, tipo_recebimento = ?, valor_total = ?, cod_cliente = ?, nome_cliente = ?, frete = ?
+            WHERE id = ?
+        ''', (data, tipo_recebimento, valor_total, cod_cliente, nome_cliente, frete, orcamento[0]))
+
+        conn.commit()
+        conn.close()
+
+        st.success("Orçamento atualizado com sucesso!")
+
+def salvar_orcamento():
+    conn = sqlite3.connect('banco.db')
+    cursor = conn.cursor()
+    cursor.execute('''
+        INSERT INTO orcamento (data, numero_pedido, cod_cliente, nome_cliente, valor_total, observacao)
+        VALUES (?, ?, ?, ?, ?, ?)
+    ''', (st.session_state.data_orcamento, st.session_state.numero_orcamento, codigo_cliente, nome_cliente, total_orcamento, st.session_state.observacao_orcamento))
+    conn.commit()
+
+    id_orcamento = cursor.lastrowid
+
+    for produto in st.session_state.orcamento_produtos:
+        cursor.execute('''
+            INSERT INTO itens_orcamento (id_orcamento, id_produto, quantidade, preco_unitario, valor_total)
+            VALUES (?, ?, ?, ?, ?)
+        ''', (id_orcamento, produto["id"], produto["Quantidade"], produto["Preço Unitário"], produto["Total"]))
+    
+    conn.commit()
+    conn.close()
 
 cabecalho()
 
@@ -535,7 +652,7 @@ elif st.session_state.page == 'FecharCaixa':
             
 elif st.session_state.page == 'Venda':
     exibir_data_atual()
-    st.subheader("Tela de Venda")
+    st.header("Tela de Venda")
     
     if "produtos_venda" not in st.session_state:
         st.session_state.produtos_venda = []
@@ -548,13 +665,27 @@ elif st.session_state.page == 'Venda':
 
     produtos = buscar_produto()
 
-    col1, col2 = st.columns([1, 4])
+    col1, col2, col3 = st.columns([1.5,1.5,4])
 
     with col1:
-        quantidade = st.number_input("Quantidade desejada", min_value=1, value=1)
+        quantidade = st.number_input("Quantidade", min_value=1, value=1)
     with col2:
+        codigo_produto = st.text_input("Código", "")
+    with col3:
         opc_pro = ["Selecione um produto"] + [f"{produto[2]}" for produto in produtos]
         descricao = st.selectbox("Descrição", opc_pro)
+
+    if codigo_produto.strip():
+        produto_por_codigo = next((produto for produto in produtos if str(produto[1]) == codigo_produto.strip()), None)
+        if produto_por_codigo:
+            descricao = produto_por_codigo[2]
+        else:
+            st.warning("Código de produto não encontrado.")
+
+    if descricao != "Selecione um produto":
+        produto_por_descricao = next((produto for produto in produtos if produto[2] == descricao), None)
+        if produto_por_descricao:
+            codigo_produto = str(produto_por_descricao[1])
 
     submit_buscar = st.button("Adicionar Produto")
 
@@ -574,8 +705,6 @@ elif st.session_state.page == 'Venda':
                         "Total": quantidade * preco
                     })
                     st.success("Produto adicionado com sucesso!")
-                else:
-                    st.error("Quantidade maior do que disponível em estoque.")
             else:
                 st.warning("Produto não encontrado.")
         else:
@@ -587,7 +716,6 @@ elif st.session_state.page == 'Venda':
         st.session_state.total_produtos = df_produtos["Total"].sum()
 
         st.table(df_produtos[["Código", "Descrição", "Quantidade", "Preço Unitário", "Total"]])
-        st.write(f"Total dos Produtos: R${st.session_state.total_produtos:.2f}")
     else:
         st.session_state.total_produtos = 0.0
         st.write("Nenhum produto adicionado à venda.")
@@ -613,7 +741,6 @@ elif st.session_state.page == 'Venda':
         st.session_state.percentual_ajuste = st.number_input("Desconto/Acréscimo (%)", min_value=-100.0, value=st.session_state.percentual_ajuste, step=0.1)
     with col4:
         subtotal_com_frete = st.session_state.total_produtos + st.session_state.valor_frete
-
         st.session_state.valor_final = subtotal_com_frete * (1 + st.session_state.percentual_ajuste / 100)
         valor_total_input = st.number_input("Valor Total", min_value=0.0, value=st.session_state.valor_final, format="%.2f")
 
@@ -622,7 +749,7 @@ elif st.session_state.page == 'Venda':
     if submit_venda:
         if st.session_state.produtos_venda:
             venda_id = registrar_venda(
-                data_atual=datetime.now().strftime('%y-%m-%d'),
+                data_atual=datetime.now().strftime('%Y-%m-%d'),
                 tipo_recebimento=metodo_pagamento,
                 valor_total=valor_total_input,
                 cod_cliente=codigo_cliente,
@@ -651,9 +778,9 @@ elif st.session_state.page == 'Venda':
             st.warning("Nenhum produto adicionado à venda.")
 
 elif st.session_state.page == 'Orc':
-    exibir_data_atual()
-    st.subheader("Tela de Orçamentos")
-    
+    exibir_orcamento_atual()
+
+elif st.session_state.page == 'incluir_orcamento':
     if "orcamento_produtos" not in st.session_state:
         st.session_state.orcamento_produtos = []
     if "numero_orcamento" not in st.session_state:
@@ -662,68 +789,105 @@ elif st.session_state.page == 'Orc':
         st.session_state.data_orcamento = datetime.now().strftime("%d/%m/%Y")
     if "observacao_orcamento" not in st.session_state:
         st.session_state.observacao_orcamento = ""
-    
-    with st.form("form_adicionar_produto_orcamento"):
-        codigo_descricao = st.text_input("Buscar produto por código ou descrição")
-        quantidade = st.number_input("Quantidade desejada", min_value=1, value=1)
-        percentual_ajuste = st.number_input("Desconto/Acréscimo (%)", min_value=-100.0, value=0.0, step=0.1)
-        submit_buscar = st.form_submit_button("Adicionar Produto")
         
-        if submit_buscar:
-            produtos = buscar_produto(codigo_descricao)
-            if produtos:
-                produto_selecionado = produtos[0]
-                preco_original = produto_selecionado[-1]
-                preco_ajustado = preco_original * (1 + percentual_ajuste / 100)
-                st.session_state.orcamento_produtos.append({
-                    "codigo": produto_selecionado[1],
-                    "descricao": produto_selecionado[2],
-                    "quantidade": quantidade,
-                    "preco_unitario": preco_original,
-                    "percentual_ajuste": percentual_ajuste,
-                    "preco_ajustado": preco_ajustado,
-                    "total_item": quantidade * preco_ajustado
-                })
-                st.success("Produto adicionado ao orçamento com sucesso!")
+    st.write('\n')
+    st.header("Novo Orçamento")
+    st.write(f"*Número do Orçamento:* {st.session_state.numero_orcamento}")
+    st.write(f"*Data do Orçamento:* {st.session_state.data_orcamento}")
+    
+    
+    produtos = buscar_produto()
+
+    col1, col2, col3 = st.columns([1.5, 1.5, 4])
+
+    with col1:
+        quantidade = st.number_input("Quantidade", min_value=1, value=1)
+    with col2:
+        codigo_produto = st.text_input("Código", "")
+    with col3:
+        opc_pro = ["Selecione um produto"] + [f"{produto[2]}" for produto in produtos]
+        descricao = st.selectbox("Descrição", opc_pro)
+
+    if codigo_produto.strip():
+        produto_por_codigo = next((produto for produto in produtos if str(produto[1]) == codigo_produto.strip()), None)
+        if produto_por_codigo:
+            descricao = produto_por_codigo[2]
+        else:
+            st.warning("Código de produto não encontrado.")
+
+    if descricao != "Selecione um produto":
+        produto_por_descricao = next((produto for produto in produtos if produto[2] == descricao), None)
+        if produto_por_descricao:
+            codigo_produto = str(produto_por_descricao[1])
+
+    submit_buscar = st.button("Adicionar Produto")
+
+    if submit_buscar:
+        if descricao != "Selecione um produto" and produtos:
+            produto_selecionado = next((produto for produto in produtos if produto[2] == descricao), None)
+
+            if produto_selecionado:
+                if quantidade <= produto_selecionado[6]:
+                    preco = produto_selecionado[9]
+                    st.session_state.orcamento_produtos.append({
+                        "id": produto_selecionado[0],
+                        "Código": produto_selecionado[1],
+                        "Descrição": produto_selecionado[2],
+                        "Quantidade": quantidade,
+                        "Preço Unitário": preco,
+                        "Total": quantidade * preco
+                    })
+                    st.success("Produto adicionado com sucesso!")
             else:
                 st.warning("Produto não encontrado.")
+        else:
+            st.warning("Por favor, selecione um produto válido.")
 
-    if st.session_state.orcamento_produtos:
-        
-        st.write("### Produtos no Orçamento")
+    if st.session_state.orcamento_produtos:   
+        st.subheader("Produtos no Orçamento")
         df_orcamento = pd.DataFrame(st.session_state.orcamento_produtos)
-        total_orcamento = df_orcamento["total_item"].sum()
+        total_orcamento = df_orcamento["Total"].sum()
 
-        st.table(df_orcamento[["codigo", "descricao", "quantidade", "preco_unitario", "percentual_ajuste", "preco_ajustado", "total_item"]])
-        st.write(f"*Total do Orçamento: R${total_orcamento:.2f}*")
+        st.table(df_orcamento[["Código", "Descrição", "Quantidade", "Preço Unitário", "Total"]])
 
-    with st.form("form_dados_orcamento"):
-        st.write(f"*Número do Orçamento:* {st.session_state.numero_orcamento}")
-        st.write(f"*Data do Orçamento:* {st.session_state.data_orcamento}")
-        codigo_cliente = st.text_input("Código do Cliente")
-        nome_cliente = st.text_input("Nome do Cliente")
-        st.session_state.observacao_orcamento = st.text_area("Observações", value=st.session_state.observacao_orcamento)
-        submit_orcamento = st.form_submit_button("Finalizar Orçamento")
-        
-        if submit_orcamento:
-            if st.session_state.orcamento_produtos:
-                st.success("Orçamento finalizado com sucesso!")
-                st.write(f"*Número do Orçamento:* {st.session_state.numero_orcamento}")
-                st.write(f"*Data do Orçamento:* {st.session_state.data_orcamento}")
-                st.write(f"*Total do Orçamento:* R${total_orcamento:.2f}")
-                st.write(f"*Cliente:* {nome_cliente} (Código: {codigo_cliente})")
-                st.write(f"*Observações:* {st.session_state.observacao_orcamento}")
+    else:
+        total_orcamento = 0.0
+        st.write("Nenhum produto adicionado ao orçamento.")
 
-                st.session_state.orcamento_produtos = []
-                st.session_state.numero_orcamento = gerar_numero_orcamento()
-                st.session_state.data_orcamento = datetime.now().strftime("%d/%m/%Y")
-                st.session_state.observacao_orcamento = ""
-            else:
-                st.warning("Nenhum produto adicionado ao orçamento.")
+    clientes = buscar_clientes()
+    opc_cli = ["Selecione um cliente"] + [f"{cliente[1]} ({cliente[2]})" for cliente in clientes]
+    nome_cliente = st.selectbox("Cliente", opc_cli)
+    st.session_state.observacao_orcamento = st.text_area("Observações", value=st.session_state.observacao_orcamento)
+
+    if nome_cliente == "Selecione um cliente" or not clientes:
+        codigo_cliente = ""
+        nome_cliente = ""
+    else:
+        indice_cliente = opc_cli.index(nome_cliente) - 1
+        codigo_cliente = clientes[indice_cliente][0]
+
+    submit_orcamento = st.button("Finalizar Orçamento")
+     
+    if submit_orcamento:
+        if st.session_state.orcamento_produtos:
+            salvar_orcamento()
+            st.success("Orçamento finalizado com sucesso!")
+            st.write(f"*Número do Orçamento:* {st.session_state.numero_orcamento}")
+            st.write(f"*Data do Orçamento:* {st.session_state.data_orcamento}")
+            st.write(f"*Total do Orçamento:* R${total_orcamento:.2f}")
+            st.write(f"*Cliente:* {nome_cliente} (Código: {codigo_cliente})")
+            st.write(f"*Observações:* {st.session_state.observacao_orcamento}")
+
+            st.session_state.orcamento_produtos = []
+            st.session_state.numero_orcamento = gerar_numero_orcamento()
+            st.session_state.data_orcamento = datetime.now().strftime("%d/%m/%Y")
+            st.session_state.observacao_orcamento = ""
+        else:
+            st.warning("Nenhum produto adicionado ao orçamento.")
 
 elif st.session_state.page == 'ListV':
     st.write('\n')
-    st.subheader('Vendas')
+    st.header('Vendas')
 
     col1, col2, col3, col4, col5 = st.columns([1,1,2,2,2])
     
@@ -791,7 +955,7 @@ if st.session_state.page == 'list':
     st.header('Listagem de Vendas por Período')
 
     if st.button('Voltar', use_container_width=True, key="voltar_button"):
-        st.session_state.page = 'vendas'
+        st.session_state.page = 'ListV'
         st.rerun()
 
     tela_pesquisa_venda_periodo()

@@ -67,13 +67,23 @@ def criar_banco_dados():
             numero_pedido INTEGER NOT NULL,
             cod_cliente INTEGER NOT NULL,
             nome_cliente TEXT NOT NULL,
-            contato TEXT NOT NULL,
             valor_total REAL NOT NULL,
             observacao TEXT,
             FOREIGN KEY(cod_cliente) REFERENCES cadastro_cliente_pessoa_fisica(cod_cliente)
             ON DELETE CASCADE ON UPDATE CASCADE
         )
     ''')
+
+    cursor.execute('''CREATE TABLE IF NOT EXISTS itens_orcamento (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        id_orcamento INTEGER NOT NULL,
+        id_produto INTEGER NOT NULL,
+        quantidade INTEGER NOT NULL,
+        preco_unitario REAL NOT NULL,
+        valor_total REAL NOT NULL,
+        FOREIGN KEY(id_orcamento) REFERENCES orcamento(id) ON DELETE CASCADE ON UPDATE CASCADE,
+        FOREIGN KEY(id_produto) REFERENCES produtos(id) ON DELETE CASCADE ON UPDATE CASCADE
+    )''')
 
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS contas_a_pagar (

@@ -5,10 +5,6 @@ import pandas as pd
 import locale
 from fpdf import FPDF
 import xml.etree.ElementTree as ET
-import smtplib
-from email.mime.multipart import MIMEMultipart
-from email.mime.base import MIMEBase
-from email import encoders
 
 locale.setlocale(locale.LC_ALL, 'portuguese')
 
@@ -400,45 +396,6 @@ def tela_pesquisa():
     if pesquisa:
         produtos_encontrados = pesquisar_produtos(pesquisa)
         exibir_resultados_pesquisa(produtos_encontrados)
- 
-def enviar_email(pdf_file, fornecedor_cod):
-    conn = conectar_db()
-    cursor = conn.cursor()
-    cursor.execute('SELECT email FROM cadastro_fornecedores WHERE cod_fornecedor = ?', (fornecedor_cod,))
-    fornecedor = cursor.fetchone()
-
-    if fornecedor:
-        email_fornecedor = fornecedor[0]
-    else:
-        st.error('Fornecedor não encontrado no banco de dados.')
-        return
-
-    remetente = 'seu_email@gmail.com'
-    destinatario = email_fornecedor
-    assunto = 'Pedido de Compra'
-    corpo = 'Segue anexo o pedido de compra em PDF.'
-
-    mensagem = MIMEMultipart()
-    mensagem['From'] = remetente
-    mensagem['To'] = destinatario
-    mensagem['Subject'] = assunto
-
-    pdf_attachment = MIMEBase('application', 'octet-stream')
-    pdf_attachment.set_payload(pdf_file)
-    encoders.encode_base64(pdf_attachment)
-    pdf_attachment.add_header('Content-Disposition', 'attachment; filename="pedido.pdf"')
-    mensagem.attach(pdf_attachment)
-
-    try:
-        with smtplib.SMTP('smtp.example.com', 587) as server:
-            server.starttls()
-            server.login(remetente, 'sua_senha')
-            server.send_message(mensagem)
-        st.success('Pedido enviado por email com sucesso!')
-    except Exception as e:
-        st.error(f'Erro ao enviar email: {e}')
-    finally:
-        conn.close()
 
 col1, col2, col3 = st.columns(3)
 
@@ -570,7 +527,7 @@ if st.session_state.page == 'PedC':
     st.write('\n')
     st.subheader('Pedido de Compra')
 
-    col1, col2, col3 = st.columns([2,2,4])
+    col1, col2 = st.columns([2,4])
 
     st.write('\n')
     pesquisa_fornecedor = st.text_input("Insira o código ou a descrição do Fornecedor: ")
@@ -592,22 +549,6 @@ if st.session_state.page == 'PedC':
         )
         
     with col2:
-        if st.button('Enviar por Email', use_container_width=True, key='ev_email'):
-            conn = conectar_db()
-            cursor = conn.cursor()
-            cursor.execute('''
-                SELECT cod_fornecedor FROM cadastro_fornecedores 
-                WHERE cod_fornecedor = ? OR nome_fornecedor LIKE ? 
-            ''', (pesquisa_fornecedor, '%' + pesquisa_fornecedor + '%'))
-            fornecedor = cursor.fetchone()
-            conn.close()
-
-            if fornecedor:
-                fornecedor_cod = fornecedor[0]
-                enviar_email(pdf_file, fornecedor_cod)
-            else:
-                st.error('Fornecedor não encontrado.')
-    with col3:
         st.write('')
     
     if produtos:
