@@ -11,11 +11,6 @@ locale.setlocale(locale.LC_ALL, 'portuguese')
 
 def run():
 
-
-    def exibir_data_atual():
-        data_atual = datetime.now().strftime("%d/%m/%Y")
-        st.markdown(f"<h1 style='text-align: left;'>{data_atual}</h1>", unsafe_allow_html=True)
-
     def formatar_contabil(valor):
         return locale.currency(valor, grouping=True)
 

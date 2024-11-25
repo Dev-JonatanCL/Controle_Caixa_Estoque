@@ -5,6 +5,11 @@ from fpdf import FPDF
 import sqlite3
 import random
 import locale
+import tempfile
+import subprocess
+import platform
+import win32print
+import win32api
 
 def run():
         
@@ -820,6 +825,58 @@ def run():
         pdf_output = pdf.output(dest='S').encode('latin1')
         return pdf_output
 
+    def gerar_comprovante_pdf(venda_id, valor_total_input):
+        pdf = FPDF()
+        pdf.add_page()
+        pdf.set_font("Arial", size=12)
+
+        pdf.cell(200, 10, txt="Comprovante de Venda", ln=True, align="C")
+
+        pdf.ln(10)
+        pdf.cell(200, 10, txt=f"Data: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", ln=True)
+        pdf.cell(200, 10, txt=f"Valor Total: R${valor_total_input:.2f}", ln=True)
+        pdf.cell(200, 10, txt=f"Subtotal: R${st.session_state.total_produtos:.2f}", ln=True)
+        pdf.cell(200, 10, txt=f"Frete: R${st.session_state.valor_frete:.2f}", ln=True)
+        pdf.cell(200, 10, txt=f"Percentual de Ajuste: {st.session_state.percentual_ajuste:.2f}%", ln=True)
+
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as temp_pdf:
+            pdf.output(temp_pdf.name)
+            return temp_pdf.name
+
+    def obter_impressoras_windows():
+        return win32print.EnumPrinters(win32print.PRINTER_ENUM_LOCAL | win32print.PRINTER_ENUM_CONNECTIONS, None, 1)
+
+    def imprimir_pdf_pdf_win(pdf_path, printer_name):
+        win32api.ShellExecute(0, "print", pdf_path, f'/d:"{printer_name}"', ".", 0)
+
+    def imprimir_pdf_linux(pdf_path, printer_name):
+        subprocess.run(["lp", "-d", printer_name, pdf_path])
+
+    def imprimir_comprovante(venda_id, valor_total_input):
+        pdf_path = gerar_comprovante_pdf(venda_id, valor_total_input)
+
+        sistema = platform.system()
+
+        if sistema == "Windows":
+            impressoras = obter_impressoras_windows()
+            impressoras_lista = [printer[2] for printer in impressoras]
+            impressora_selecionada = st.selectbox("Escolha a Impressora", impressoras_lista)
+
+            imprimir_pdf_pdf_win(pdf_path, impressora_selecionada)
+
+        elif sistema == "Linux":
+            resultado = subprocess.run(['lpstat', '-d'], capture_output=True, text=True)
+            impressoras_lista = resultado.stdout.splitlines()
+
+            if len(impressoras_lista) > 0:
+                impressora_selecionada = st.selectbox("Escolha a Impressora", impressoras_lista)
+            else:
+                impressora_selecionada = st.text_input("Nome da impressora", "printer_name")
+
+            imprimir_pdf_linux(pdf_path, impressora_selecionada)
+        else:
+            st.error("Sistema operacional não suportado")
+
     cabecalho()
 
     if 'page' not in st.session_state:
@@ -981,6 +1038,9 @@ def run():
                         preco_unitario=item["Preço Unitário"],
                         valor_total=item["Total"]
                     )
+
+                imprimir_comprovante(venda_id, valor_total_input)
+                
                 st.success(f"Compra finalizada com sucesso! Venda ID: {venda_id}")
                 st.write(f"Subtotal: R${st.session_state.total_produtos:.2f}")
                 st.write(f"Frete: R${st.session_state.valor_frete:.2f}")
@@ -991,6 +1051,7 @@ def run():
                 st.session_state.valor_frete = 0.0
                 st.session_state.valor_final = 0.0
                 st.session_state.percentual_ajuste = 0.0
+
             else:
                 st.warning("Nenhum produto adicionado à venda.")
 
