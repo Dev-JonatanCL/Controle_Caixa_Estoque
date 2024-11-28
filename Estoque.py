@@ -7,7 +7,10 @@ from fpdf import FPDF
 import xml.etree.ElementTree as ET
 import re
 
-locale.setlocale(locale.LC_ALL, 'portuguese')
+try:
+    locale.setlocale(locale.LC_ALL, 'pt_BR.UTF-8')
+except locale.Error:
+    locale.setlocale(locale.LC_ALL, 'C.UTF-8')
 
 def run():
 
