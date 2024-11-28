@@ -15,11 +15,9 @@ def run():
 
     def formatar_contabil(valor):
         try:
-            valor = float(valor)
-            
             return locale.currency(valor, grouping=True)
         except ValueError:
-            return "Valor inválido"
+            return f"R$ {valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
     def formatar_data(data_str):
         if isinstance(data_str, str):
