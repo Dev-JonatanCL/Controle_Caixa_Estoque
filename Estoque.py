@@ -14,7 +14,10 @@ def run():
         locale.setlocale(locale.LC_ALL, 'C.UTF-8')
 
     def formatar_contabil(valor):
-        return locale.currency(valor, grouping=True)
+        try:
+            return locale.currency(valor, grouping=True)
+        except ValueError:
+            return f"R$ {valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
     def formatar_margem(margem):
         return "{:.2f}%".format(margem * 100/100)
