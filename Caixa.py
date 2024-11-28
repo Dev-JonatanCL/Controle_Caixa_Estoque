@@ -7,12 +7,11 @@ import random
 import locale
 import tempfile
 
-try:
-    locale.setlocale(locale.LC_ALL, 'pt_BR.UTF-8')
-except locale.Error:
-    locale.setlocale(locale.LC_ALL, 'C.UTF-8')
-
 def run():
+    try:
+        locale.setlocale(locale.LC_ALL, 'pt_BR.UTF-8')
+    except locale.Error:
+        locale.setlocale(locale.LC_ALL, 'C.UTF-8')
 
     def conectar_db():
         return sqlite3.connect('banco.db')
