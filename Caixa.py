@@ -8,10 +8,10 @@ import locale
 import tempfile
 
 def run():
-    try:
-        locale.setlocale(locale.LC_ALL, 'pt_BR.UTF-8')
-    except locale.Error:
-        locale.setlocale(locale.LC_ALL, 'C.UTF-8')
+    #try:
+        #locale.setlocale(locale.LC_ALL, 'pt_BR.UTF-8')
+    #except locale.Error:
+        #locale.setlocale(locale.LC_ALL, 'C.UTF-8')
 
     def conectar_db():
         return sqlite3.connect('banco.db')
@@ -127,14 +127,16 @@ def run():
         st.session_state.valor_digitado = valor_digitado
         st.session_state.valor_troco = valor_troco
         st.session_state.sangria = 0.0
-        st.session_state.vendas_em_dinheiro = 0.0
         st.session_state.page = 'FecharCaixa'
         st.session_state.caixa_aberto = True
         st.rerun()
 
     def registrar_venda(data_atual, valor_total, tipo_recebimento, cod_cliente, nome_cliente, frete):
-        data_atual = datetime.today().strftime('%Y-%m-%d')
+        if 'vendas_em_dinheiro' not in st.session_state:
+            st.session_state.vendas_em_dinheiro = 0.0
 
+        data_atual = datetime.today().strftime('%Y-%m-%d')
+            
         conn = conectar_db()
         cursor = conn.cursor() 
         cursor.execute('''INSERT INTO venda (data, tipo_recebimento, valor_total, cod_cliente, nome_cliente, frete) 
@@ -144,7 +146,7 @@ def run():
         
         venda_id = cursor.lastrowid
 
-        if tipo_recebimento == 'dinheiro':
+        if tipo_recebimento == 'Dinheiro':
             st.session_state.vendas_em_dinheiro += valor_total
             cursor.execute('SELECT * FROM caixa WHERE data = ? ORDER BY id DESC LIMIT 1', (data_atual,))
             caixa_aberto = cursor.fetchone()
@@ -168,7 +170,27 @@ def run():
         conn.commit()
         conn.close()
 
+    def atualizar_valor_em_caixa():
+        total_notas_moedas = (
+            (nota2 * 2) +
+            (nota5 * 5) +
+            (nota10 * 10) +
+            (nota20 * 20) +
+            (nota50 * 50) +
+            (moeda05 * 0.05) +
+            (moeda10 * 0.10) +
+            (moeda25 * 0.25) +
+            (moeda50 * 0.50) +
+            (moeda1 * 1)
+        )
+        valor_total_em_caixa = st.session_state.valor_digitado + total_notas_moedas
+        st.session_state.valor_digitado = valor_total_em_caixa
+
+        return valor_total_em_caixa
+
     def finalizar_caixa(valor_em_caixa):
+        if "vendas_em_dinheiro" not in st.session_state:
+            st.session_state.vendas_em_dinheiro = 0.0
         conn = conectar_db()
         cursor = conn.cursor()
         cursor.execute('SELECT * FROM caixa WHERE data = ? ORDER BY id DESC LIMIT 1', (datetime.today().strftime('%Y-%m-%d'),))
@@ -179,7 +201,7 @@ def run():
             troco_inicial = float(caixa_aberto[3])
             valor_final = float(caixa_aberto[4])
             troco_final = float(caixa_aberto[5])
-            valor_sangria = float(caixa_aberto[6]) 
+            valor_sangria = float(caixa_aberto[6])
 
             st.write(f"Fechamento de caixa realizado com os valores abaixo:")
             st.write(f"Valor inicial em caixa: R${valor_inicial:.2f}")
@@ -189,10 +211,26 @@ def run():
             st.write(f"Troco final: R${troco_final:.2f}")
             st.write(f"Total em caixa: R${valor_final:.2f}")
 
+            total_notas_moedas = (
+                (nota2 * 2) +
+                (nota5 * 5) +
+                (nota10 * 10) +
+                (nota20 * 20) +
+                (nota50 * 50) +
+                (moeda05 * 0.05) +
+                (moeda10 * 0.10) +
+                (moeda25 * 0.25) +
+                (moeda50 * 0.50) +
+                (moeda1 * 1)
+            )
+
+            valor_total_em_caixa = atualizar_valor_em_caixa()
+
             cursor.execute('''UPDATE caixa SET valor_final = ?, troco_final = ? WHERE id = ?''',
-                        (valor_final, troco_final, caixa_aberto[0]))
+                           (valor_final, troco_final, caixa_aberto[0]))
             conn.commit()
             conn.close()
+
             st.session_state.caixa_aberto = False
 
         st.session_state.page = 'Ab/Fc'
@@ -872,22 +910,54 @@ def run():
             guardar_troco_valor = st.number_input("Guardar Troco", min_value=0.0, format="%.2f")
             if st.button('Guardar Troco', use_container_width=True):
                 guardar_troco(guardar_troco_valor)
-        
+
+        col1, col2, col3, col4, col5 = st.columns(5)
+
+        with col1:
+            nota2 = st.number_input("Notas de R$2", min_value=-100000, value=0)
+        with col2:
+            nota5 = st.number_input("Notas de R$5", min_value=-100000, value=0)
+        with col3:
+            nota10 = st.number_input("Notas de R$10", min_value=-100000, value=0)
+        with col4:
+            nota20 = st.number_input("Notas de R$20", min_value=-100000, value=0)
+        with col5:
+            nota50 = st.number_input("Notas de R$50", min_value=-100000, value=0)
+
+        col1, col2, col3, col4, col5 = st.columns(5)
+
+        with col1:
+            moeda05 = st.number_input("Moedas de R$0,05", min_value=-100000, value=0)
+        with col2:
+            moeda10 = st.number_input("Moedas de R$0,10", min_value=-100000, value=0)
+        with col3:
+            moeda25 = st.number_input("Moedas de R$0,25", min_value=-100000, value=0)
+        with col4:
+            moeda50 = st.number_input("Moedas de R$0,50", min_value=-100000, value=0)
+        with col5:
+            moeda1 = st.number_input("Moedas de R$1", min_value=-100000, value=0)
+
+        valor_em_caixa = atualizar_valor_em_caixa()
+
         col4, col5 = st.columns(2)
         with col4:
-            valor_em_caixa = st.number_input("Digite o valor em caixa", min_value=0.0, value=st.session_state.valor_digitado, format="%.2f")
+            valor_em_caixa = st.number_input("Valor em Caixa", min_value=-100000.0, value=st.session_state.valor_digitado, format="%.2f", disabled=True)
         with col5:
-            valor_do_troco = st.number_input("Troco guardado", min_value=0.0, value=st.session_state.valor_troco, format="%.2f")
+            valor_do_troco = st.number_input("Troco guardado", min_value=0.0, value=st.session_state.valor_troco, format="%.2f", disabled=True)
 
-        if valor_em_caixa == 0:
-            st.warning("Falta dinheiro no caixa! Deseja finalizar o caixa mesmo assim?", icon="⚠️")
+        if valor_em_caixa < 0:
+            st.markdown('<p style="color:red;">Falta dinheiro no caixa! Deseja finalizar o caixa mesmo assim?</p>', unsafe_allow_html=True)
+            finalizar = st.button('Sim, finalizar caixa', use_container_width=True)
+        elif valor_em_caixa > 0:
+            st.markdown('<p style="color:yellow;">Sobra dinheiro! Deseja finalizar o caixa mesmo assim?</p>', unsafe_allow_html=True)
             finalizar = st.button('Sim, finalizar caixa', use_container_width=True)
         else:
+            st.markdown('<p style="color:green;">Caixa certo! </p>', unsafe_allow_html=True)
             finalizar = st.button('Finalizar Caixa', use_container_width=True)
 
         if finalizar:
-            finalizar_caixa(valor_em_caixa)   
-                
+            finalizar_caixa(valor_em_caixa)    
+
     if st.session_state.page == 'Venda':
         exibir_data_atual()
         st.header("Tela de Venda")
