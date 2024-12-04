@@ -6,7 +6,6 @@ from datetime import datetime
 
 def run():
 
-
     def conectar_db():
         return sqlite3.connect('banco.db')
 
