@@ -331,6 +331,8 @@ def run():
                 st.rerun()
 
         if input_option == 'Fornecedor':
+            if 'indice_pagar' not in st.session_state:
+                st.session_state.indice_pagar = 0
             with st.form("form_contas_a_pagar_fornecedor"):
 
                 col1, col2 = st.columns(2)
@@ -364,6 +366,8 @@ def run():
                     st.error('Preencha todos os campos obrigatórios.')
 
         else:
+            if 'indice_pagar' not in st.session_state:
+                st.session_state.indice_pagar = 0
             with st.form("form_contas_a_pagar_fornecedor"):
 
                 col1, col2 = st.columns(2)
