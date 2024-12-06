@@ -371,8 +371,12 @@ def run():
                 with col1:
                     cod = st.text_input("Código do Fornecedor")
                     nome = st.text_input("Razão Social")
-                    data_entrada = st.date_input("Data de Entrada")
-                    vencimento = st.date_input("Vencimento")
+                    data_entrada = datetime.strptime(pagar[3], '%Y-%m-%d').date()
+                    data_entrada_formatada = data_entrada.strftime('%d/%m/%Y')
+                    st.text_input("Data de Entrada", data_entrada_formatada, disabled=True)
+                    vencimento = datetime.strptime(pagar[4], '%Y-%m-%d').date()
+                    vencimento_formatada = vencimento.strftime('%d/%m/%Y')
+                    vencimento = st.text_input("Vencimento", vencimento_formatada)
                 with col2:
                     num_documento = st.text_input("Número do Documento")
                     parcela = st.number_input("Parcela", min_value=1, step=1)
