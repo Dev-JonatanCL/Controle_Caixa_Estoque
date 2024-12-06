@@ -282,7 +282,7 @@ def run():
         st.write('\n')
         st.header("Contas a pagar")
 
-        col1, col2, col3, col4, col5 = st.columns([1,1,2,2,2])
+        col1, col2, col3, col4 = st.columns([1,1,2,2])
         
         with col1:
             if st.button("←", use_container_width=True, key="left_button"):
@@ -295,16 +295,11 @@ def run():
                     st.session_state.indice_pagar += 1
 
         with col3:
-            if st.button('Incluir', use_container_width=True, key="incluir_button"):
-                st.session_state.page = 'incluir'
-                st.rerun()
-
-        with col4:
             if st.button('Pesquisar', use_container_width=True, key="pesq_pagar_button"):
                 st.session_state.page = 'pesq_pagar'
                 st.rerun()
 
-        with col5:
+        with col4:
             if st.button('Listagem', use_container_width=True, key="listagem_pagar_button"):
                 st.session_state.page = 'list_pagar'
                 st.rerun()
