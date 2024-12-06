@@ -312,6 +312,11 @@ def run():
         exibir_contas_a_pagar()
 
     if st.session_state.page == 'incluir':
+        conn = conectar_db()
+        cursor = conn.cursor()
+        cursor.execute(''' SELECT * FROM contas_a_pagar LIMIT 1 OFFSET ? ''', (st.session_state.indice_pagar,))
+        pagar = cursor.fetchone()
+        conn.close()
         st.write('\n')
         st.header('Cadastrar nova conta')
 
