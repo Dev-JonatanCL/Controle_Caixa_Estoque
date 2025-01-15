@@ -1,4 +1,4 @@
-
+<h1 align="center">Controle de Caixa e estoque</h1>
 
 <p width="100%" align="center">
     <img src="./Logo.jpg" width="200px">
